@@ -1,0 +1,41 @@
+// SPDX-License-Identifier: MIT
+package s05_atlas
+
+import (
+	"image"
+	"neomega-assets/asset"
+	"testing"
+)
+
+func TestAnimationGridCoordinates(t *testing.T) {
+	img := image.NewNRGBA(image.Rect(0, 0, 64, 64))
+	metadata := asset.TextureMetadata{Animation: &asset.Animation{Width: 32, Height: 16, Frames: []asset.Frame{{Index: 3}}}}
+	got, err := FirstFrame(img, metadata)
+	if err != nil || got != image.Rect(32, 16, 64, 32) {
+		t.Fatalf("first frame = %v, %v", got, err)
+	}
+	metadata.Animation.Frames[0].Index = 8
+	if _, err := FirstFrame(img, metadata); err == nil {
+		t.Fatal("out-of-range animation frame accepted")
+	}
+}
+
+func TestPackReusesSpaceBelowShortRectangles(t *testing.T) {
+	// These exactly fill a 64x64 image; row-only packing wastes the space under b.
+	packed, size, err := pack([]rectangle{{name: "a", width: 32, height: 64}, {name: "b", width: 32, height: 32}, {name: "c", width: 32, height: 32}}, 16)
+	if err != nil || size != 64 {
+		t.Fatalf("packed side %d: %v", size, err)
+	}
+	for i, a := range packed {
+		ra := image.Rectangle{Min: a.position, Max: a.position.Add(image.Pt(a.width, a.height))}
+		if !ra.In(image.Rect(0, 0, size, size)) {
+			t.Fatal("out of bounds")
+		}
+		for _, b := range packed[:i] {
+			rb := image.Rectangle{Min: b.position, Max: b.position.Add(image.Pt(b.width, b.height))}
+			if ra.Overlaps(rb) {
+				t.Fatal("overlapping textures")
+			}
+		}
+	}
+}

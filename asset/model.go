@@ -208,9 +208,25 @@ func (condition *Condition) UnmarshalJSON(data []byte) error {
 			}
 		default:
 			var text string
-			if err := json.Unmarshal(value, &text); err != nil {
-				return fmt.Errorf("condition %s must be a string: %w", key, err)
+			raw := bytes.TrimSpace(value)
+			switch {
+			case len(raw) > 0 && raw[0] == '"':
+				if err := json.Unmarshal(raw, &text); err != nil {
+					return err
+				}
+			case bytes.Equal(raw, []byte("true")) || bytes.Equal(raw, []byte("false")):
+				text = string(raw)
+			case len(raw) > 0 && (raw[0] == '-' || raw[0] >= '0' && raw[0] <= '9'):
+				var number json.Number
+				if err := json.Unmarshal(raw, &number); err != nil {
+					return err
+				}
+				text = number.String()
+			default:
+				return fmt.Errorf("condition %s must be a scalar property value", key)
 			}
+			// Resource packs and older mc-assets data may use bools/numbers;
+			// property comparisons have textual semantics in the renderer.
 			condition.Properties[key] = text
 		}
 	}
@@ -261,9 +277,11 @@ type Tables struct {
 }
 
 type ModelIndex struct {
-	Version          string `json:"version"`
-	RequiredTextures []ID   `json:"requiredTextures"`
-	BuiltinModels    []ID   `json:"builtinModels"`
-	ModelCount       int    `json:"modelCount"`
-	BlockStateCount  int    `json:"blockStateCount"`
+	// Empty geometry can be intentional (air/fluids) or require a special renderer.
+	GeometrylessBlockStates []ID   `json:"geometrylessBlockStates"`
+	Version                 string `json:"version"`
+	RequiredTextures        []ID   `json:"requiredTextures"`
+	BuiltinModels           []ID   `json:"builtinModels"`
+	ModelCount              int    `json:"modelCount"`
+	BlockStateCount         int    `json:"blockStateCount"`
 }

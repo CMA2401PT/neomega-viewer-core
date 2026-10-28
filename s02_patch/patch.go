@@ -6,13 +6,12 @@ package s02_patch
 import (
 	"context"
 	"fmt"
-	"io"
 	"io/fs"
-	"os"
 	"path/filepath"
 
 	"neomega-assets/asset"
 	"neomega-assets/internal/jsonfile"
+	"neomega-assets/internal/resourcefiles"
 	"neomega-assets/s01_extract"
 )
 
@@ -21,27 +20,6 @@ type Options struct {
 	OutputDir string
 	// ResourcePacks are directories with the standard assets/<namespace>/ layout.
 	ResourcePacks []string
-}
-
-func copyFile(source, destination string) error {
-	if err := os.MkdirAll(filepath.Dir(destination), 0755); err != nil {
-		return err
-	}
-	input, err := os.Open(source)
-	if err != nil {
-		return err
-	}
-	defer input.Close()
-	output, err := os.Create(destination)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(output, input)
-	closeErr := output.Close()
-	if err != nil {
-		return err
-	}
-	return closeErr
 }
 
 func Run(ctx context.Context, opt Options) (*asset.Snapshot, error) {
@@ -60,16 +38,8 @@ func Run(ctx context.Context, opt Options) (*asset.Snapshot, error) {
 	if inputPath == outputPath {
 		return nil, fmt.Errorf("patch output must differ from input")
 	}
-	maps := []map[asset.ID]asset.File{input.BlockStates, input.Models, input.Textures, input.TextureMetadata}
-	for _, files := range maps {
-		for _, file := range files {
-			if err := ctx.Err(); err != nil {
-				return nil, err
-			}
-			if err := copyFile(filepath.Join(opt.InputDir, filepath.FromSlash(file.Path)), filepath.Join(opt.OutputDir, filepath.FromSlash(file.Path))); err != nil {
-				return nil, err
-			}
-		}
+	if err := resourcefiles.CopySnapshot(ctx, input, opt.InputDir, opt.OutputDir); err != nil {
+		return nil, err
 	}
 
 	for _, pack := range opt.ResourcePacks {
@@ -103,7 +73,7 @@ func applyPack(snapshot *asset.Snapshot, output, pack string) error {
 		if !ok {
 			return nil
 		}
-		if err := copyFile(path, filepath.Join(output, relative)); err != nil {
+		if err := resourcefiles.CopyFile(path, filepath.Join(output, relative)); err != nil {
 			return err
 		}
 		file := asset.File{Path: filepath.ToSlash(relative), Origin: path}

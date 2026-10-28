@@ -58,10 +58,12 @@ type Atlases struct {
 }
 
 type BuildInfo struct {
-	Version         string   `json:"version"`
-	Sources         []Source `json:"sources"`
-	BlockStateCount int      `json:"blockStateCount"`
-	ModelCount      int      `json:"modelCount"`
-	TextureCount    int      `json:"textureCount"`
-	BuiltinModels   []ID     `json:"builtinModels"`
+	GeometrylessBlockStates []ID                 `json:"geometrylessBlockStates"`
+	RendererCounts          map[RendererKind]int `json:"rendererCounts"`
+	Version                 string               `json:"version"`
+	Sources                 []Source             `json:"sources"`
+	BlockStateCount         int                  `json:"blockStateCount"`
+	ModelCount              int                  `json:"modelCount"`
+	TextureCount            int                  `json:"textureCount"`
+	BuiltinModels           []ID                 `json:"builtinModels"`
 }

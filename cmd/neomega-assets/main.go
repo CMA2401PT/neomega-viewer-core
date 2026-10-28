@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 
 	"neomega-assets/fetch"
+	"neomega-assets/inventory"
 	"neomega-assets/s01_extract"
 	"neomega-assets/s02_patch"
 	"neomega-assets/s03_models"
-	"neomega-assets/s04_atlas"
+	"neomega-assets/s04_special"
+	"neomega-assets/s05_atlas"
 )
 
 type paths []string
@@ -24,7 +26,7 @@ func (value *paths) Set(path string) error { *value = append(*value, path); retu
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: neomega-assets <fetch|extract|patch|models|atlas|build> -help")
+		return fmt.Errorf("usage: neomega-assets <fetch|extract|patch|models|special|atlas|audit|build> -help")
 	}
 	flags := flag.NewFlagSet(args[0], flag.ContinueOnError)
 	var overlays paths
@@ -79,21 +81,53 @@ func run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("s03: %d blockstates, %d models, %d referenced textures, %d builtin models -> %s\n", report.BlockStateCount, report.ModelCount, len(report.RequiredTextures), len(report.BuiltinModels), *output)
+		fmt.Printf("s03: %d blockstates, %d models, %d referenced textures, %d geometryless blockstates -> %s\n", report.BlockStateCount, report.ModelCount, len(report.RequiredTextures), len(report.GeometrylessBlockStates), *output)
 		return nil
-	case "atlas":
+	case "special":
 		input := flags.String("in", "work/02-patched", "patched snapshot directory")
 		models := flags.String("models", "work/03-models", "model table/report directory")
+		output := flags.String("out", "work/04-renderers", "completed models and renderer plans")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		report, err := s04_special.Run(ctx, s04_special.Options{InputDir: *input, ModelDir: *models, OutputDir: *output})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("s04: renderer counts %v -> %s\n", report.Counts, *output)
+		return nil
+	case "atlas":
+		input := flags.String("in", "work/04-renderers", "s04 completed snapshot directory")
+		models := flags.String("models", "work/04-renderers", "model table/report directory")
 		output := flags.String("out", "dist", "final output directory")
 		tile := flags.Int("tile-size", 16, "block texture tile size, power of two")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
-		atlas, err := s04_atlas.Run(ctx, s04_atlas.Options{InputDir: *input, ModelDir: *models, OutputDir: *output, TileSize: *tile})
+		atlas, err := s05_atlas.Run(ctx, s05_atlas.Options{InputDir: *input, ModelDir: *models, OutputDir: *output, TileSize: *tile})
 		if err != nil {
 			return err
 		}
-		fmt.Printf("s04: %d textures, %dx%d atlas -> %s\n", len(atlas.Textures), atlas.Width, atlas.Height, *output)
+		fmt.Printf("s05: %d textures, %dx%d atlas -> %s\n", len(atlas.Textures), atlas.Width, atlas.Height, *output)
+		return nil
+	case "audit":
+		baseline := flags.String("baseline", "", "baseline mc-assets directory with tables")
+		current := flags.String("current", "dist", "current final output")
+		snapshot := flags.String("snapshot", "work/01-extracted", "original JAR snapshot")
+		raw := flags.String("raw-models", "work/03-models", "models before special previews")
+		completed := flags.String("completed", "work/04-renderers", "completed models/index")
+		output := flags.String("out", "audits/atlas-inventory.json", "inventory report path")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
+		}
+		if *baseline == "" {
+			return fmt.Errorf("audit requires -baseline")
+		}
+		report, err := inventory.Run(inventory.Options{BaselineDir: *baseline, CurrentDir: *current, SnapshotDir: *snapshot, RawModelDir: *raw, CompletedDir: *completed, OutputPath: *output})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("audit: %d -> %d textures, %d missing JAR block textures, %d missing references, geometry regressions %d -> %d\n", report.BaselineTextures, report.CurrentTextures, len(report.MissingCurrentBlockPNGs), len(report.MissingRequiredTextures), len(report.BeforeMissingGeometry), len(report.AfterMissingGeometry))
 		return nil
 	case "build":
 		jar := flags.String("jar", "", "local JAR; when omitted fetch -version")
@@ -130,12 +164,18 @@ func run(ctx context.Context, args []string) error {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("s03: %d models, %d builtin models\n", report.ModelCount, len(report.BuiltinModels))
-		atlas, err := s04_atlas.Run(ctx, s04_atlas.Options{InputDir: patched, ModelDir: models, OutputDir: *output, TileSize: 16})
+		fmt.Printf("s03: %d models, %d geometryless blockstates\n", report.ModelCount, len(report.GeometrylessBlockStates))
+		completed := filepath.Join(*work, "04-renderers")
+		rendering, err := s04_special.Run(ctx, s04_special.Options{InputDir: patched, ModelDir: models, OutputDir: completed})
 		if err != nil {
 			return err
 		}
-		fmt.Printf("s04: %d textures, %dx%d -> %s\n", len(atlas.Textures), atlas.Width, atlas.Height, *output)
+		fmt.Printf("s04: renderer counts %v\n", rendering.Counts)
+		atlas, err := s05_atlas.Run(ctx, s05_atlas.Options{InputDir: completed, ModelDir: completed, OutputDir: *output, TileSize: 16})
+		if err != nil {
+			return err
+		}
+		fmt.Printf("s05: %d textures, %dx%d -> %s\n", len(atlas.Textures), atlas.Width, atlas.Height, *output)
 		return nil
 	default:
 		return fmt.Errorf("unknown command %q", args[0])

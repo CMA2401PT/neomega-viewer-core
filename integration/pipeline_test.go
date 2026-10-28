@@ -14,10 +14,12 @@ import (
 	"testing"
 
 	"neomega-assets/asset"
+	"neomega-assets/inventory"
 	"neomega-assets/s01_extract"
 	"neomega-assets/s02_patch"
 	"neomega-assets/s03_models"
-	"neomega-assets/s04_atlas"
+	"neomega-assets/s04_special"
+	"neomega-assets/s05_atlas"
 )
 
 func fixturePNG(t *testing.T, width, height int, paint func(int, int) color.NRGBA) []byte {
@@ -80,7 +82,7 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		"assets/minecraft/blockstates/stone.json":          []byte(`{"variants":{"": [{"model":"minecraft:block/stone","weight":2},{"model":"minecraft:block/stone","y":90}]}}`),
 		"assets/minecraft/models/block/cube_all.json":      []byte(`{"elements":[{"name":"test cube","shade_direction_override":"north","from":[0,0,0],"to":[16,16,16],"faces":{"north":{"texture":"#all"}}}]}`),
 		"assets/minecraft/models/block/stone.json":         []byte(`{"parent":"minecraft:block/cube_all","textures":{"all":{"sprite":"minecraft:block/stone","force_translucent":true}},"texture_size":[16,16]}`),
-		"assets/demo/blockstates/panel.json":               []byte(`{"multipart":[{"when":{"OR":[{"axis":"x"},{"AND":[{"axis":"y"},{"lit":"true"}]}]},"apply":{"model":"demo:block/panel"}}]}`),
+		"assets/demo/blockstates/panel.json":               []byte(`{"multipart":[{"when":{"OR":[{"axis":"x"},{"AND":[{"axis":"y"},{"lit":true}]}]},"apply":{"model":"demo:block/panel"}}]}`),
 		"assets/demo/models/block/panel.json":              []byte(`{"textures":{"skin":"demo:entity/panel"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#skin"}}}]}`),
 		"assets/minecraft/textures/block/stone.png.mcmeta": []byte(`{"animation":{"frames":[{"index":1,"time":3},0]}}`),
 		"assets/minecraft/textures/block/stone.png": fixturePNG(t, 16, 32, func(x, y int) color.NRGBA {
@@ -93,11 +95,20 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		"assets/minecraft/../../escape.txt":     []byte("not a resource"),
 		"com/example/NotAnAsset.class":          []byte("not a resource"),
 	}
+	// A real game-style placeholder must become visible through s04, rather
+	// than being incorrectly counted as an ordinary model with zero faces.
+	entries["assets/minecraft/blockstates/chest.json"] = []byte(`{"variants":{"":{"model":"minecraft:block/chest"}}}`)
+	entries["assets/minecraft/models/block/chest.json"] = []byte(`{"textures":{"particle":"minecraft:block/stone"}}`)
+	entries["assets/minecraft/models/block/block.json"] = []byte(`{}`)
+	for _, name := range []string{"normal", "normal_left", "normal_right"} {
+		entries["assets/minecraft/textures/entity/chest/"+name+".png"] = fixturePNG(t, 64, 64, func(x, y int) color.NRGBA { return color.NRGBA{R: 120, G: 60, A: 255} })
+	}
 	writeJar(t, jar, entries)
 	extracted := filepath.Join(root, "01")
 	patched := filepath.Join(root, "02")
 	models := filepath.Join(root, "03")
 	output := filepath.Join(root, "dist")
+	completed := filepath.Join(root, "04")
 	snapshot, err := s01_extract.Run(context.Background(), s01_extract.Options{JarPath: jar, OutputDir: extracted})
 	if err != nil {
 		t.Fatal(err)
@@ -114,7 +125,22 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if _, err := s03_models.Run(s03_models.Options{InputDir: patched, OutputDir: models}); err != nil {
 		t.Fatal(err)
 	}
-	atlas, err := s04_atlas.Run(context.Background(), s04_atlas.Options{InputDir: patched, ModelDir: models, OutputDir: output})
+	rawReport := readJSON[asset.ModelIndex](t, filepath.Join(models, "models.json"))
+	if len(rawReport.GeometrylessBlockStates) != 1 || rawReport.GeometrylessBlockStates[0] != "minecraft:chest" {
+		t.Fatalf("placeholder was not detected: %v", rawReport.GeometrylessBlockStates)
+	}
+	plans, err := s04_special.Run(context.Background(), s04_special.Options{InputDir: patched, ModelDir: models, OutputDir: completed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan := plans.Blocks["minecraft:chest"]; plan.Kind != asset.RendererSpecial || !plan.StaticPreview || len(plan.DynamicFields) == 0 {
+		t.Fatalf("chest render contract missing: %+v", plan)
+	}
+	completedReport := readJSON[asset.ModelIndex](t, filepath.Join(completed, "models.json"))
+	if len(completedReport.GeometrylessBlockStates) != 0 {
+		t.Fatal("chest still has no geometry")
+	}
+	atlas, err := s05_atlas.Run(context.Background(), s05_atlas.Options{InputDir: completed, ModelDir: completed, OutputDir: output})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,6 +157,12 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	pixel := color.NRGBAModel.Convert(img.At(int(stone.U*float64(atlas.Width)), int(stone.V*float64(atlas.Height)))).(color.NRGBA)
 	if pixel != (color.NRGBA{G: 255, A: 255}) {
 		t.Fatalf("selected wrong animation frame: %v", pixel)
+	}
+	if _, ok := atlas.Textures["entity/chest/normal_left"]; !ok {
+		t.Fatal("double chest entity texture was dropped")
+	}
+	if _, err := os.Stat(filepath.Join(output, "blockRenderers.json")); err != nil {
+		t.Fatal("renderer table was not exported")
 	}
 	panel := atlas.Textures["demo:entity/panel"]
 	if panel.SU*float64(atlas.Width) != 48 || panel.SV*float64(atlas.Height) != 32 {
@@ -173,13 +205,20 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		t.Fatal("license notices not exported")
 	}
 	second := filepath.Join(root, "again")
-	if _, err := s04_atlas.Run(context.Background(), s04_atlas.Options{InputDir: patched, ModelDir: models, OutputDir: second}); err != nil {
+	if _, err := s05_atlas.Run(context.Background(), s05_atlas.Options{InputDir: completed, ModelDir: completed, OutputDir: second}); err != nil {
 		t.Fatal(err)
 	}
 	firstBytes, _ := os.ReadFile(filepath.Join(output, "blocksAtlasLatest.png"))
 	secondBytes, _ := os.ReadFile(filepath.Join(second, "blocksAtlasLatest.png"))
 	if !bytes.Equal(firstBytes, secondBytes) {
 		t.Fatal("atlas placement is not deterministic")
+	}
+	audit, err := inventory.Run(inventory.Options{BaselineDir: output, CurrentDir: output, SnapshotDir: extracted, RawModelDir: models, CompletedDir: completed, OutputPath: filepath.Join(root, "inventory.json")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(audit.BeforeMissingGeometry) != 1 || len(audit.BeforeMissingBaselineTextures) != 3 || len(audit.AfterMissingGeometry) != 0 || len(audit.MissingRequiredTextures) != 0 || !audit.BoundsChecked {
+		t.Fatalf("coverage audit failed: %+v", audit)
 	}
 }
 

@@ -194,7 +194,9 @@ func Run(opt Options) (*asset.ModelIndex, error) {
 	required := map[asset.ID]bool{}
 	builtins := map[asset.ID]bool{}
 	hardcoded := map[string]string{}
+	geometryless := []asset.ID{}
 	for block, state := range states {
+		visible := false
 		for _, application := range state.Applications() {
 			model, err := resolver.Resolve(application.Model)
 			if err != nil {
@@ -205,6 +207,9 @@ func Run(opt Options) (*asset.ModelIndex, error) {
 				hardcoded[application.Model.ExportName()] = model.Builtin.ExportName()
 			}
 			for _, element := range model.Elements {
+				if len(element.Faces) > 0 {
+					visible = true
+				}
 				for _, face := range element.Faces {
 					texture, err := model.Texture(face.Texture)
 					if err != nil {
@@ -214,8 +219,12 @@ func Run(opt Options) (*asset.ModelIndex, error) {
 				}
 			}
 		}
+		if !visible {
+			geometryless = append(geometryless, block)
+		}
 	}
-	report := &asset.ModelIndex{Version: snapshot.Version, ModelCount: len(models), BlockStateCount: len(states)}
+	slices.Sort(geometryless)
+	report := &asset.ModelIndex{Version: snapshot.Version, ModelCount: len(models), BlockStateCount: len(states), GeometrylessBlockStates: geometryless}
 	for id := range required {
 		report.RequiredTextures = append(report.RequiredTextures, id)
 	}
