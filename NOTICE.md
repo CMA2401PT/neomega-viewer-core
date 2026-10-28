@@ -15,12 +15,12 @@
 |---|---|
 | `src/datapaths-builder.ts` | `s01_extract` 的资源类别、目录与索引概念 |
 | `src/newAssetsBuilder.ts`、`src/consumer/types.ts` | `asset`、`s03_models` 的模型结构和导出约定 |
-| `custom/blockentities/latest`、`custom/textures` | `s04_special` 使用的社区静态预览素材 |
+| `custom/blockentities/1.13`、`1.20`、`latest` 及 `custom/textures` | `s04_special` 使用的社区静态预览素材 |
 | `src/genBlocks.ts`、`src/consumer/atlasCreator.ts` | `s05_atlas` 的产物名称、纹理类别与 UV 字段约定 |
 
 下载、JAR 读取、模型图检查、PNG 处理和格子装箱由 Go 标准库实现。相关 Go 文件包含 SPDX 标识及来源注释。
 
-附带的素材保存在 [resources/third_party/mc-assets/templates](resources/third_party/mc-assets/templates)，包含 86 份方块状态模板、147 份依赖模型和 17 张自定义纹理。文件对应关系保存在 `index.json`。这些文件来自上述固定提交，原有模型署名保留，其中包括 `Made with Blockbench by TyBraniff for Bluemaps support.`。
+附带的素材保存在 [resources/third_party/mc-assets/templates](resources/third_party/mc-assets/templates)，包含 150 份方块状态模板、234 份依赖模型和 17 张自定义纹理。文件对应关系保存在 `index.json`。这些文件来自上述固定提交，原有模型署名保留，其中包括 `Made with Blockbench by TyBraniff for Bluemaps support.`。
 
 手工维护的分类与适配规则集中在 [resources/special.go](resources/special.go)，由第四步应用。导入时会改写模型命名空间、规范化资源引用、适配旗帜纹理的新路径，并为染色潜影盒选择对应皮肤。完整说明见 [模板来源与适配](resources/third_party/mc-assets/README.md)。这些适配不会改变原素材的权利来源。
 

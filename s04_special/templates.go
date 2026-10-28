@@ -71,7 +71,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 		}
 	}
 	for key, binding := range model.Textures {
-		binding.Sprite, err = resources.NormalizeTextureReference(binding.Sprite)
+		binding.Sprite, err = resources.NormalizeTextureReference(binding.Sprite, importer.snapshot.Textures)
 		if err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 	if model.Elements != nil {
 		for i := range *model.Elements {
 			for side, face := range (*model.Elements)[i].Faces {
-				face.Texture, err = resources.NormalizeTextureReference(face.Texture)
+				face.Texture, err = resources.NormalizeTextureReference(face.Texture, importer.snapshot.Textures)
 				if err != nil {
 					return err
 				}

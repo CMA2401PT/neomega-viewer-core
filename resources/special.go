@@ -9,6 +9,9 @@ import (
 	"neomega-assets/asset"
 )
 
+// JavaTargetVersion is aligned with neomega-blocks' existing conversion preset.
+const JavaTargetVersion = "1.21.4"
+
 // NonModelRenderer identifies supported vanilla blocks without static geometry.
 // The pipeline itself handles minecraft:air.
 func NonModelRenderer(id asset.ID) (asset.BlockRenderer, bool) {
@@ -51,6 +54,11 @@ func SpecialRenderer(id asset.ID) asset.BlockRenderer {
 		if strings.Contains(name, "piglin") {
 			profile.DynamicFields = []string{"earMotion"}
 		}
+	case strings.HasSuffix(name, "_sign"):
+		profile.Family = "sign"
+		profile.DynamicFields = []string{"frontText", "backText"}
+	case strings.HasSuffix(name, "_bed"):
+		profile.Family = "bed"
 	case name == "decorated_pot":
 		profile.Family = "decorated_pot"
 		profile.DynamicFields = []string{"sherds", "wobble"}
@@ -94,6 +102,8 @@ func FamilyUsesTexture(family string, id asset.ID) bool {
 // Families also declare textures used by dynamic effects, not just those that
 // appear in the static template's faces (banner patterns, eyes, lid skins, etc.).
 var familyPrefixes = map[string][]string{
+	"bed":                 {"entity/bed/"},
+	"sign":                {"entity/signs/"},
 	"chest":               {"entity/chest/"},
 	"shulker_box":         {"entity/shulker/"},
 	"banner":              {"entity/banner/"},
@@ -121,13 +131,17 @@ func NormalizeModelReference(value asset.ID) (asset.ID, error) {
 }
 
 // NormalizeTextureReference adapts legacy texture paths to current resources.
-func NormalizeTextureReference(value asset.TextureRef) (asset.TextureRef, error) {
+func NormalizeTextureReference(value asset.TextureRef, available map[asset.ID]asset.File) (asset.TextureRef, error) {
 	if strings.HasPrefix(string(value), "#") {
 		return value, nil
 	}
 	id, err := asset.ParseID(string(value))
 	if err != nil {
 		return "", err
+	}
+	// Keep a version's real path, including explicit overrides, when it exists.
+	if _, ok := available[id]; ok {
+		return asset.TextureRef(id), nil
 	}
 	// This entity texture moved in modern client resources.
 	if id == "minecraft:entity/banner_base" {

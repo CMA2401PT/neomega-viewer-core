@@ -6,7 +6,6 @@ package mcassets
 import (
 	"embed"
 	"encoding/json"
-	"strings"
 
 	"neomega-assets/asset"
 )
@@ -20,6 +19,7 @@ type Index struct {
 	States     map[asset.ID]string `json:"states"`
 	Models     map[asset.ID]string `json:"models"`
 	Textures   map[asset.ID]string `json:"textures"`
+	Origins    map[string]string   `json:"origins"`
 	Credits    []string            `json:"credits"`
 }
 
@@ -40,17 +40,17 @@ func Read(path string) ([]byte, error) {
 
 // StateOrigin maps an embedded state back to its original upstream path.
 func (index Index) StateOrigin(id asset.ID) string {
-	return index.Repository + "@" + index.Revision + "/custom/blockentities/latest/blockStates/" + strings.TrimPrefix(index.States[id], "states/")
+	return index.origin(index.States[id])
 }
 
 // ModelOrigin maps an embedded model back to its original upstream path.
 func (index Index) ModelOrigin(path string) string {
-	return index.Repository + "@" + index.Revision + "/custom/blockentities/latest/blockModels/" + strings.TrimPrefix(path, "models/")
+	return index.origin(path)
 }
 
 // TextureOrigin maps an embedded texture back to its original upstream path.
 func (index Index) TextureOrigin(path string) string {
-	return index.Repository + "@" + index.Revision + "/custom/" + path
+	return index.origin(path)
 }
 
 // Source records both the upstream code license and the original asset rights.
@@ -60,4 +60,8 @@ func (index Index) Source() asset.Source {
 		Location: index.Repository + "/tree/" + index.Revision + "/custom",
 		License:  "MIT; original model credits retained; Minecraft-derived material retains original rights",
 	}
+}
+
+func (index Index) origin(path string) string {
+	return index.Repository + "@" + index.Revision + "/" + index.Origins[path]
 }

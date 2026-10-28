@@ -4,7 +4,7 @@
 
 理解整个流程，只需要先记住：**方块状态选择模型，模型引用纹理，图集坐标表告诉渲染器去 PNG 的哪里取这张纹理。** 但箱子、旗帜等方块的外形由游戏代码绘制，JAR 中没有完整方块模型。本工具为它们补充静态预览，并用另一张表说明完整渲染还需要什么数据。
 
-一次构建处理一个版本。本文以 **Minecraft Java 26.3** 为例，版本来自 [Mojang 官方版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)。版本信息记录在 `build-info.json` 中，数据表直接保存这个版本的内容。
+一次构建处理一个版本。默认使用 **Minecraft Java 1.21.4**，与 `neomega-blocks` 的 Java 输出目标一致，版本来自 [Mojang 官方版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)。版本信息记录在 `build-info.json` 中，数据表直接保存这个版本的内容。
 
 ## 先得到一份输出
 
@@ -13,16 +13,16 @@
 在 `neomega-assets` 目录执行：
 
 ```sh
-go run ./cmd/neomega-assets build -version 26.3
+go run ./cmd/neomega-assets build -version 1.21.4
 ```
 
-命令下载客户端到 `.cache/26.3/client.jar`，然后依次运行五步。已经有 JAR 时，可以直接指定：
+命令下载客户端到 `.cache/1.21.4/client.jar`，然后依次运行五步。已经有 JAR 时，可以直接指定：
 
 ```sh
 go run ./cmd/neomega-assets build -jar /path/to/client.jar
 ```
 
-希望跟随最新正式版时，用 `-version latest`。需要复现结果时，指定版本或固定的本地 JAR。
+可以用 `-version` 显式选择其他版本，或用 `-version latest` 跟随最新正式版。与 `neomega-blocks` 配套时，应使用它的 `JavaTargetVersion` 对应版本。需要复现结果时，指定版本或固定的本地 JAR。
 
 完成后，`dist/final` 中有五份配套产物：
 
@@ -82,9 +82,9 @@ go run ./parse/cli -dir dist/final \
 整理模型前，需要先知道资源在哪里。`s01_extract` 提取相关文件，并建立 `snapshot.json` 资源索引：
 
 ```sh
-go run ./cmd/neomega-assets fetch -version 26.3
+go run ./cmd/neomega-assets fetch -version 1.21.4
 go run ./cmd/neomega-assets extract \
-  -jar .cache/26.3/client.jar \
+  -jar .cache/1.21.4/client.jar \
   -out dist/works/01-extracted
 ```
 
@@ -142,7 +142,7 @@ go run ./cmd/neomega-assets models \
 
 这一步生成 `blockstates.json`、`models.json`，以及独立的检查报告 `model-index.json`。它检查方块实际引用的模型、父模型和纹理变量，遇到缺失模型或循环时报告资源名。报告列出需要的纹理，并在 `geometrylessBlockStates` 中列出没有任何面的方块。
 
-**没有缺失引用，不代表方块已经能显示。** 26.3 的原始资源中有 96 种方块没有几何。箱子可能只有粒子纹理；空气本来就不可见；水则需要根据邻居生成表面。仅统计 `builtin/...` 父模型识别不了这些情况，这也是第四步存在的原因。
+**没有缺失引用，不代表方块已经能显示。** 1.21.4 的原始资源中有 144 种方块没有几何。箱子可能只有粒子纹理；空气本来就不可见；水则需要根据邻居生成表面。仅统计 `builtin/...` 父模型识别不了这些情况，这也是第四步存在的原因。
 
 输出保留继承、变体、权重和逻辑条件。解析用于检查关系和收集纹理，具体选择仍由消费者根据方块状态完成。
 
@@ -163,7 +163,7 @@ go run ./cmd/neomega-assets special \
   -out dist/works/04-renderers
 ```
 
-这一步使用随工具附带的 `mc-assets` 社区模板，为箱子、潜影盒、旗帜、头颅、饰纹陶罐、铜傀儡雕像、潮涌核心和末地传送门等补充静态模型。模板及其依赖按需导入 `neomega:` 命名空间，避免替换 JAR 的原生模型。26.3 已有的床、告示牌等几何直接保留。染色潜影盒选择对应颜色的实际皮肤。
+这一步使用随工具附带的 `mc-assets` 社区模板，为箱子、潜影盒、旗帜、头颅、床、告示牌、饰纹陶罐、潮涌核心和末地传送门等补充静态模型。模板及其依赖按需导入 `neomega:` 命名空间，避免替换 JAR 的原生模型。已有原生几何直接保留。染色潜影盒选择对应颜色的实际皮肤。
 
 这些模板、纹理和无法从 JAR 推导的渲染规则集中在 [resources](resources/README.md)。它们是需要手工维护的输入资料。s04 负责应用规则、导入依赖和检查结果；仅 `minecraft:air` 的处理直接留在步骤代码中。
 
@@ -221,33 +221,33 @@ go run ./cmd/neomega-assets audit \
   -snapshot dist/works/01-extracted \
   -raw-models dist/works/03-models \
   -completed dist/works/04-renderers \
-  -out resources/audits/26.3-vs-viewer.json
+  -out resources/audits/1.21.4-vs-viewer.json
 ```
 
 这条命令检查原始 JAR 的方块纹理是否全部收录、所需纹理是否存在、PNG 尺寸与坐标是否一致，并比较补全前后的几何覆盖。全部差异名称保存在 JSON 中。**它检查资源覆盖，不等同于运行游戏渲染器逐像素比对外观。**
 
-以下数据来自 `build -jar .cache/26.3/client.jar` 和上述 `audit` 命令，没有额外覆盖包：
+以下数据来自 `build -jar .cache/1.21.4/client.jar` 和上述 `audit` 命令，没有额外覆盖包：
 
 | 项目 | 结果 |
 |---|---:|
-| JAR 方块状态 / 模型 / PNG | 1,288 / 4,192 / 3,964 |
-| 输出方块状态 / 模型 | 1,290 / 4,357 |
-| 原生模型 / 特殊静态预览 | 1,194 / 86 |
+| JAR 方块状态 / 模型 / PNG | 1,097 / 3,289 / 3,185 |
+| 输出方块状态 / 模型 | 1,099 / 3,513 |
+| 原生模型 / 特殊静态预览 | 955 / 134 |
 | 流体 / 不可见 / 运行时动态 | 3 / 6 / 1 |
-| 原始 JAR 方块纹理收录 | 1,300 / 1,300 |
-| 最终图集纹理数 / 尺寸 | 1,464 / 1024×1024 |
-| 旧表可见、原始模型无几何的方块 | 67 |
+| 原始 JAR 方块纹理收录 | 1,039 / 1,039 |
+| 最终图集纹理数 / 尺寸 | 1,218 / 1024×1024 |
+| 旧表可见、原始模型无几何的方块 | 127 |
 | 补全后仍存在上述缺口的方块 | 0 |
 
 模型统计包含 block/item 模型及导入的模板依赖；PNG 统计包含实体与其他类别，因此这些数量不应相等。输出状态额外包含两个诊断方块。
 
-旧 viewer 图集中的 379 个名称在 26.3 JAR 中已不存在，其中包括历史名称和旧版纹理布局。不能用旧图集的名称集合直接要求单版本输出。具体核对结果见 [resources/audits/README.md](resources/audits/README.md)。
+旧 viewer 图集中的 337 个名称在 1.21.4 JAR 中已不存在，其中包括历史名称和旧版纹理布局。不能用旧图集的名称集合直接要求单版本输出。具体核对结果见 [resources/audits/README.md](resources/audits/README.md)。
 
 ## 与 mc-viewer-svelte 衔接
 
 资源生成完整之后，还需要消费者理解相应格式。资源命名、图集文件名和 UV 字段参考 `mc-assets`，但本工具交付拆开的单版本表。旧 viewer 读取的合并文件和 `latest` 包装层需要改为读取 `blockstates.json`、`models.json` 与展开的 `blocksAtlases.json`。`blockRenderers.json` 补充特殊渲染需求。
 
-当前 viewer 的方块状态数据仍基于 Java `1.20.2`，旧模型解析器只理解字符串纹理。26.3 还包含 `sprite` 材质对象、新旋转字段和 `shade_direction_override` 光照方向。要完整显示最新资源，需要同步升级 viewer 的状态数据与模型消费者，并接入新表对流体、动态和特殊外观的说明。
+当前 viewer 的方块状态数据仍基于 Java `1.20.2`。要显示 1.21.4 资源，需要同步更新状态数据与模型消费者，并接入渲染说明表。
 
 消费者完成适配后，整组替换产物，再在 viewer 运行 `pnpm generate`。viewer 的 `rtids.json` 和渲染数据仍由它自己的生成流程负责。
 
@@ -285,10 +285,10 @@ go test -race ./...
 go vet ./...
 ```
 
-测试位于 `utils/integration` 与各步骤目录。测试现场创建小型 JAR 和 PNG，覆盖最终文件解析、五步产物、箱子占位模型补全、未知空模型报错、命名空间、资源覆盖、模型继承、26.3 纹理对象、加权候选、逻辑条件、动画首帧、图集空隙利用和像素坐标。测试不访问网络。
+测试位于 `utils/integration` 与各步骤目录。测试现场创建小型 JAR 和 PNG，覆盖最终文件解析、五步产物、箱子占位模型补全、未知空模型报错、命名空间、资源覆盖、模型继承、1.21.4 纹理对象、加权候选、逻辑条件、动画首帧、图集空隙利用和像素坐标。测试不访问网络。
 
 ## 来源与许可
 
-分步思路参考本工作区的 `my-mc-assets`。模型表与图集约定、特殊方块模板参考或取自 [zardoy/mc-assets](https://github.com/zardoy/mc-assets)，固定在提交 `c63d6dacd358a8ea73b453d6958167b49dcc3f6c`。模板包含 86 份方块状态、147 份依赖模型和 17 张自定义纹理，原始模型署名保留在 JSON 中。对应关系和修改说明见 [NOTICE.md](NOTICE.md) 与 [模板说明](resources/third_party/mc-assets/README.md)。
+分步思路参考本工作区的 `my-mc-assets`。模型表与图集约定、特殊方块模板参考或取自 [zardoy/mc-assets](https://github.com/zardoy/mc-assets)，固定在提交 `c63d6dacd358a8ea73b453d6958167b49dcc3f6c`。模板包含 150 份方块状态、234 份依赖模型和 17 张自定义纹理，原始模型署名保留在 JSON 中。对应关系和修改说明见 [NOTICE.md](NOTICE.md) 与 [模板说明](resources/third_party/mc-assets/README.md)。
 
 工具源码按 [MIT](LICENSE) 提供。上游 MIT 原文保存在 [resources/third_party/mc-assets/LICENSE](resources/third_party/mc-assets/LICENSE)。Minecraft 原始素材及其衍生纹理保留原权利人的权利；工具和上游代码的 MIT 声明不等于这些素材的再发布授权。分发生成结果时，应核对 [Minecraft EULA](https://www.minecraft.net/eula)、[Usage Guidelines](https://www.minecraft.net/usage-guidelines) 和覆盖包作者条款，并保留对应声明。

@@ -11,6 +11,7 @@ import (
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"neomega-assets/asset"
@@ -268,5 +269,59 @@ func TestOverlayIsExplicitAndLeavesExtractedAssetsIntact(t *testing.T) {
 	updated := readJSON[asset.Model](t, filepath.Join(output, original))
 	if old.Textures["source"].Sprite != "block/old" || updated.Textures["source"].Sprite != "block/new" {
 		t.Fatal("overlay did not preserve stage boundaries")
+	}
+}
+
+func TestJava1214BedHangingSignAndBannerPreviews(t *testing.T) {
+	root := t.TempDir()
+	jar := filepath.Join(root, "client.jar")
+	entries := map[string][]byte{
+		"version.json": []byte(`{"id":"1.21.4"}`),
+		"assets/minecraft/models/block/block.json":    []byte(`{}`),
+		"assets/minecraft/models/block/cube_all.json": []byte(`{"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#all"}}}]}`),
+	}
+	for _, name := range []string{"red_bed", "oak_wall_hanging_sign", "red_banner"} {
+		entries["assets/minecraft/blockstates/"+name+".json"] = []byte(`{"variants":{"":{"model":"block/` + name + `"}}}`)
+		entries["assets/minecraft/models/block/"+name+".json"] = []byte(`{}`)
+	}
+	for _, name := range []string{"entity/bed/red", "entity/signs/hanging/oak", "entity/banner_base"} {
+		entries["assets/minecraft/textures/"+name+".png"] = fixturePNG(t, 64, 64, func(x, y int) color.NRGBA {
+			return color.NRGBA{R: 180, G: 80, A: 255}
+		})
+	}
+	writeJar(t, jar, entries)
+	extracted, patched := filepath.Join(root, "01"), filepath.Join(root, "02")
+	models, completed := filepath.Join(root, "03"), filepath.Join(root, "04")
+	output := filepath.Join(root, "final")
+	if _, err := s01_extract.Run(context.Background(), s01_extract.Options{JarPath: jar, OutputDir: extracted}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s02_patch.Run(context.Background(), s02_patch.Options{InputDir: extracted, OutputDir: patched}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s03_models.Run(s03_models.Options{InputDir: patched, OutputDir: models}); err != nil {
+		t.Fatal(err)
+	}
+	plans, err := s04_special.Run(context.Background(), s04_special.Options{InputDir: patched, ModelDir: models, OutputDir: completed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, family := range map[asset.ID]string{"minecraft:red_bed": "bed", "minecraft:oak_wall_hanging_sign": "sign", "minecraft:red_banner": "banner"} {
+		plan := plans.Blocks[name]
+		if plan.Kind != asset.RendererSpecial || !plan.StaticPreview || plan.Family != family {
+			t.Fatalf("wrong static preview for %s: %+v", name, plan)
+		}
+	}
+	if !strings.Contains(plans.Blocks["minecraft:oak_wall_hanging_sign"].TemplateSource, "/1.20/blockStates/sign/") {
+		t.Fatal("hanging sign attribution does not point to the actual upstream file")
+	}
+	atlas, err := s05_atlas.Run(context.Background(), s05_atlas.Options{InputDir: completed, ModelDir: completed, OutputDir: output})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"entity/bed/red", "entity/signs/hanging/oak", "entity/banner_base"} {
+		if _, ok := atlas.Textures[name]; !ok {
+			t.Fatalf("missing old-version skin %s", name)
+		}
 	}
 }

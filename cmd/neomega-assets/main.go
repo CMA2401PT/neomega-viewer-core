@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 
+	"neomega-assets/resources"
 	"neomega-assets/s01_extract"
 	"neomega-assets/s02_patch"
 	"neomega-assets/s03_models"
@@ -32,7 +33,7 @@ func run(ctx context.Context, args []string) error {
 	var overlays paths
 	switch args[0] {
 	case "fetch":
-		version := flags.String("version", "latest", "Mojang release ID, or latest for the latest stable release")
+		version := flags.String("version", resources.JavaTargetVersion, "Mojang release ID, or latest for the latest stable release")
 		cache := flags.String("cache", ".cache", "download directory")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
@@ -131,7 +132,7 @@ func run(ctx context.Context, args []string) error {
 		return nil
 	case "build":
 		jar := flags.String("jar", "", "local JAR; when omitted fetch -version")
-		version := flags.String("version", "latest", "release ID when downloading")
+		version := flags.String("version", resources.JavaTargetVersion, "release ID when downloading")
 		cache := flags.String("cache", ".cache", "download directory")
 		work := flags.String("work", "dist/works", "intermediate directories")
 		output := flags.String("out", "dist/final", "final output directory")
