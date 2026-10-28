@@ -13,8 +13,9 @@ import (
 	"strings"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
+	"neomega-assets/parse"
 	"neomega-assets/s03_models"
+	"neomega-assets/utils/jsonfile"
 )
 
 type Options struct {
@@ -46,9 +47,9 @@ type Report struct {
 	BoundsChecked                 bool       `json:"boundsChecked"`
 }
 
-func geometry(tables asset.Tables) (map[asset.ID]bool, error) {
+func geometry(blockstates asset.BlockStates, table asset.Models) (map[asset.ID]bool, error) {
 	models := map[asset.ID]asset.Model{}
-	for name, model := range tables.Models["latest"] {
+	for name, model := range table {
 		id, err := asset.ParseID(name)
 		if err != nil {
 			return nil, err
@@ -63,7 +64,7 @@ func geometry(tables asset.Tables) (map[asset.ID]bool, error) {
 	}
 	resolver := s03_models.NewResolver(models)
 	visible := map[asset.ID]bool{}
-	for name, state := range tables.BlockStates["latest"] {
+	for name, state := range blockstates {
 		id, err := asset.ParseID(name)
 		if err != nil {
 			return nil, err
@@ -89,11 +90,11 @@ func geometry(tables asset.Tables) (map[asset.ID]bool, error) {
 }
 
 func Run(opt Options) (*Report, error) {
-	baseline, err := jsonfile.Read[asset.Atlases](filepath.Join(opt.BaselineDir, "blocksAtlases.json"))
+	baseline, oldStates, oldModels, err := readBaseline(opt.BaselineDir)
 	if err != nil {
 		return nil, err
 	}
-	current, err := jsonfile.Read[asset.Atlases](filepath.Join(opt.CurrentDir, "blocksAtlases.json"))
+	current, err := parse.ReadAtlas(filepath.Join(opt.CurrentDir, "blocksAtlases.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -101,11 +102,11 @@ func Run(opt Options) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	required, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.CompletedDir, "models.json"))
+	required, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.CompletedDir, "model-index.json"))
 	if err != nil {
 		return nil, err
 	}
-	rawIndex, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.RawModelDir, "models.json"))
+	rawIndex, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.RawModelDir, "model-index.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -126,8 +127,8 @@ func Run(opt Options) (*Report, error) {
 		Baseline:                      opt.BaselineDir,
 		Current:                       opt.CurrentDir,
 		Version:                       snapshot.Version,
-		BaselineTextures:              len(baseline.Latest.Textures),
-		CurrentTextures:               len(current.Latest.Textures),
+		BaselineTextures:              len(baseline.Textures),
+		CurrentTextures:               len(current.Textures),
 		BaselineOnly:                  []string{},
 		CurrentOnly:                   []string{},
 		BaselineOnlyStillInJAR:        []string{},
@@ -137,11 +138,11 @@ func Run(opt Options) (*Report, error) {
 		BeforeMissingGeometry:         []asset.ID{},
 		AfterMissingGeometry:          []asset.ID{},
 	}
-	for name := range baseline.Latest.Textures {
+	for name := range baseline.Textures {
 		if jarTextures[name] && !rawSelected[name] {
 			report.BeforeMissingBaselineTextures = append(report.BeforeMissingBaselineTextures, name)
 		}
-		if _, ok := current.Latest.Textures[name]; ok {
+		if _, ok := current.Textures[name]; ok {
 			report.SharedTextures++
 			continue
 		}
@@ -150,45 +151,41 @@ func Run(opt Options) (*Report, error) {
 			report.BaselineOnlyStillInJAR = append(report.BaselineOnlyStillInJAR, name)
 		}
 	}
-	for name := range current.Latest.Textures {
-		if _, ok := baseline.Latest.Textures[name]; !ok {
+	for name := range current.Textures {
+		if _, ok := baseline.Textures[name]; !ok {
 			report.CurrentOnly = append(report.CurrentOnly, name)
 		}
 	}
 	for id := range snapshot.Textures {
 		if strings.HasPrefix(id.Path(), "block/") || strings.HasPrefix(id.Path(), "blocks/") {
 			report.CurrentJARBlockPNGs++
-			if _, ok := current.Latest.Textures[id.TextureName()]; !ok {
+			if _, ok := current.Textures[id.TextureName()]; !ok {
 				report.MissingCurrentBlockPNGs = append(report.MissingCurrentBlockPNGs, id)
 			}
 		}
 	}
 	for _, id := range required.RequiredTextures {
-		if _, ok := current.Latest.Textures[id.TextureName()]; !ok {
+		if _, ok := current.Textures[id.TextureName()]; !ok {
 			report.MissingRequiredTextures = append(report.MissingRequiredTextures, id)
 		}
 	}
-	oldTables, err := jsonfile.Read[asset.Tables](filepath.Join(opt.BaselineDir, "blockStatesModels.json"))
+	newStates, newModels, err := readTables(opt.CurrentDir)
 	if err != nil {
 		return nil, err
 	}
-	newTables, err := jsonfile.Read[asset.Tables](filepath.Join(opt.CurrentDir, "blockStatesModels.json"))
+	rawStates, rawModels, err := readTables(opt.RawModelDir)
 	if err != nil {
 		return nil, err
 	}
-	rawTables, err := jsonfile.Read[asset.Tables](filepath.Join(opt.RawModelDir, "blockStatesModels.json"))
+	oldVisible, err := geometry(oldStates, oldModels)
 	if err != nil {
 		return nil, err
 	}
-	oldVisible, err := geometry(oldTables)
+	newVisible, err := geometry(newStates, newModels)
 	if err != nil {
 		return nil, err
 	}
-	newVisible, err := geometry(newTables)
-	if err != nil {
-		return nil, err
-	}
-	rawVisible, err := geometry(rawTables)
+	rawVisible, err := geometry(rawStates, rawModels)
 	if err != nil {
 		return nil, err
 	}
@@ -213,17 +210,17 @@ func Run(opt Options) (*Report, error) {
 		return nil, err
 	}
 	report.CurrentPNGSize = [2]int{config.Width, config.Height}
-	if config.Width != current.Latest.Width || config.Height != current.Latest.Height {
+	if config.Width != current.Width || config.Height != current.Height {
 		return nil, fmt.Errorf("PNG and atlas table dimensions differ")
 	}
 	bounds := image.Rect(0, 0, config.Width, config.Height)
-	for name, texture := range current.Latest.Textures {
+	for name, texture := range current.Textures {
 		su, sv := texture.SU, texture.SV
 		if su == 0 {
-			su = current.Latest.SUSV
+			su = current.SUSV
 		}
 		if sv == 0 {
-			sv = current.Latest.SUSV
+			sv = current.SUSV
 		}
 		x := int(math.Round(texture.U * float64(config.Width)))
 		y := int(math.Round(texture.V * float64(config.Height)))
@@ -246,4 +243,40 @@ func Run(opt Options) (*Report, error) {
 		return nil, err
 	}
 	return report, nil
+}
+
+func readTables(dir string) (asset.BlockStates, asset.Models, error) {
+	states, err := parse.ReadBlockStates(filepath.Join(dir, "blockstates.json"))
+	if err != nil {
+		return nil, nil, err
+	}
+	models, err := parse.ReadModels(filepath.Join(dir, "models.json"))
+	return states, models, err
+}
+
+// Only the comparison baseline may use the historical viewer format. New builds
+// and the public parse package always use the split, single-version format.
+func readBaseline(dir string) (asset.Atlas, asset.BlockStates, asset.Models, error) {
+	path := filepath.Join(dir, "blockStatesModels.json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		atlas, err := parse.ReadAtlas(filepath.Join(dir, "blocksAtlases.json"))
+		if err != nil {
+			return atlas, nil, nil, err
+		}
+		states, models, err := readTables(dir)
+		return atlas, states, models, err
+	} else if err != nil {
+		return asset.Atlas{}, nil, nil, err
+	}
+	tables, err := jsonfile.Read[struct {
+		BlockStates map[string]asset.BlockStates `json:"blockstates"`
+		Models      map[string]asset.Models      `json:"models"`
+	}](path)
+	if err != nil {
+		return asset.Atlas{}, nil, nil, err
+	}
+	atlas, err := jsonfile.Read[struct {
+		Latest asset.Atlas `json:"latest"`
+	}](filepath.Join(dir, "blocksAtlases.json"))
+	return atlas.Latest, tables.BlockStates["latest"], tables.Models["latest"], err
 }

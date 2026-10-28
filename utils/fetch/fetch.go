@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
+	"neomega-assets/utils/jsonfile"
 )
 
 const ManifestURL = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"

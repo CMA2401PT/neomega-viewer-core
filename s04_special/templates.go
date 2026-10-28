@@ -9,8 +9,9 @@ import (
 	"strings"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
-	mcassets "neomega-assets/third_party/mc-assets"
+	"neomega-assets/resources"
+	mcassets "neomega-assets/resources/third_party/mc-assets"
+	"neomega-assets/utils/jsonfile"
 )
 
 type templateImporter struct {
@@ -21,46 +22,19 @@ type templateImporter struct {
 	neededTextures map[asset.ID]bool
 }
 
-func sourceModel(value asset.ID) (asset.ID, error) {
-	id, err := asset.ParseID(string(value))
-	if err != nil {
-		return "", err
-	}
-	path := id.Path()
-	if !strings.HasPrefix(path, "block/") && !strings.HasPrefix(path, "item/") && !strings.HasPrefix(path, "builtin/") {
-		path = "block/" + path
-	}
-	return asset.ID(id.Namespace() + ":" + path), nil
-}
-
 func (importer *templateImporter) modelReference(value asset.ID) (asset.ID, error) {
-	id, err := sourceModel(value)
+	id, err := resources.NormalizeModelReference(value)
 	if err != nil {
 		return "", err
 	}
 	if _, ok := importer.index.Models[id]; ok {
-		target := asset.ID("neomega:" + id.Path())
+		target := resources.ImportedModelID(id)
 		if err := importer.importModel(id, target); err != nil {
 			return "", err
 		}
 		return target, nil
 	}
 	return id, nil
-}
-
-func templateTexture(value asset.TextureRef) (asset.TextureRef, error) {
-	if strings.HasPrefix(string(value), "#") {
-		return value, nil
-	}
-	id, err := asset.ParseID(string(value))
-	if err != nil {
-		return "", err
-	}
-	// This entity texture moved in modern client resources.
-	if id == "minecraft:entity/banner_base" {
-		id = "minecraft:entity/banner/banner_base"
-	}
-	return asset.TextureRef(id), nil
 }
 
 func (importer *templateImporter) saveModel(id asset.ID, model asset.Model, origin string) error {
@@ -82,7 +56,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 	importer.importing[source] = true
 	defer delete(importer.importing, source)
 	path := importer.index.Models[source]
-	raw, err := mcassets.Files.ReadFile("templates/" + path)
+	raw, err := mcassets.Read(path)
 	if err != nil {
 		return err
 	}
@@ -97,7 +71,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 		}
 	}
 	for key, binding := range model.Textures {
-		binding.Sprite, err = templateTexture(binding.Sprite)
+		binding.Sprite, err = resources.NormalizeTextureReference(binding.Sprite)
 		if err != nil {
 			return err
 		}
@@ -109,7 +83,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 	if model.Elements != nil {
 		for i := range *model.Elements {
 			for side, face := range (*model.Elements)[i].Faces {
-				face.Texture, err = templateTexture(face.Texture)
+				face.Texture, err = resources.NormalizeTextureReference(face.Texture)
 				if err != nil {
 					return err
 				}
@@ -117,7 +91,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 			}
 		}
 	}
-	return importer.saveModel(target, model, importer.index.Repository+"@"+importer.index.Revision+"/custom/blockentities/latest/blockModels/"+strings.TrimPrefix(path, "models/"))
+	return importer.saveModel(target, model, importer.index.ModelOrigin(path))
 }
 
 func (importer *templateImporter) state(block asset.ID) (asset.BlockState, error) {
@@ -125,7 +99,7 @@ func (importer *templateImporter) state(block asset.ID) (asset.BlockState, error
 	if !ok {
 		return asset.BlockState{}, fmt.Errorf("no special model template for %s", block)
 	}
-	raw, err := mcassets.Files.ReadFile("templates/" + path)
+	raw, err := mcassets.Read(path)
 	if err != nil {
 		return asset.BlockState{}, err
 	}
@@ -154,8 +128,8 @@ func (importer *templateImporter) state(block asset.ID) (asset.BlockState, error
 			return state, err
 		}
 	}
-	if strings.HasSuffix(block.Path(), "_shulker_box") {
-		state, err = importer.shulkerColor(block, state)
+	if variant, ok := resources.TemplateVariantFor(block); ok {
+		state, err = importer.modelVariant(variant, state)
 		if err != nil {
 			return state, err
 		}
@@ -163,24 +137,23 @@ func (importer *templateImporter) state(block asset.ID) (asset.BlockState, error
 	return state, nil
 }
 
-func (importer *templateImporter) shulkerColor(block asset.ID, state asset.BlockState) (asset.BlockState, error) {
-	color := strings.TrimSuffix(block.Path(), "_shulker_box")
-	source := asset.ID("neomega:block/entity/dyed_shulker_box")
-	file, ok := importer.snapshot.Models[source]
+// modelVariant applies the resource rule without knowing which block requested it.
+func (importer *templateImporter) modelVariant(variant resources.TemplateVariant, state asset.BlockState) (asset.BlockState, error) {
+	file, ok := importer.snapshot.Models[variant.Source]
 	if !ok {
-		return state, fmt.Errorf("missing dyed shulker template")
+		return state, fmt.Errorf("missing preview source model %s", variant.Source)
 	}
 	model, err := jsonfile.Read[asset.Model](filepath.Join(importer.output, filepath.FromSlash(file.Path)))
 	if err != nil {
 		return state, err
 	}
-	texture := asset.ID("minecraft:entity/shulker/shulker_" + color)
-	if _, ok := importer.snapshot.Textures[texture]; !ok {
-		return state, fmt.Errorf("missing shulker skin %s", texture)
+	for slot, texture := range variant.Textures {
+		if _, ok := importer.snapshot.Textures[texture]; !ok {
+			return state, fmt.Errorf("missing preview texture %s", texture)
+		}
+		model.Textures[slot] = asset.TextureBinding{Sprite: asset.TextureRef(texture)}
 	}
-	model.Textures["0"] = asset.TextureBinding{Sprite: asset.TextureRef(texture)}
-	// Use the actual colored skin once, rather than tinting it a second time.
-	if model.Elements != nil {
+	if variant.ClearTint && model.Elements != nil {
 		for i := range *model.Elements {
 			for side, face := range (*model.Elements)[i].Faces {
 				face.TintIndex = nil
@@ -188,17 +161,22 @@ func (importer *templateImporter) shulkerColor(block asset.ID, state asset.Block
 			}
 		}
 	}
-	target := asset.ID("neomega:block/preview/" + block.Path())
-	if err := importer.saveModel(target, model, file.Origin+" (selected "+color+" skin)"); err != nil {
+	if err := importer.saveModel(variant.Target, model, file.Origin+variant.OriginNote); err != nil {
 		return state, err
 	}
-	for key, choice := range state.Variants {
+	replace := func(choice *asset.Choice) {
 		for i := range choice.Options {
-			if choice.Options[i].Model == source {
-				choice.Options[i].Model = target
+			if choice.Options[i].Model == variant.Source {
+				choice.Options[i].Model = variant.Target
 			}
 		}
+	}
+	for key, choice := range state.Variants {
+		replace(&choice)
 		state.Variants[key] = choice
+	}
+	for i := range state.Multipart {
+		replace(&state.Multipart[i].Apply)
 	}
 	return state, nil
 }
@@ -213,7 +191,7 @@ func (importer *templateImporter) textures() error {
 			continue
 		}
 		relative := "assets/" + id.Namespace() + "/textures/" + id.Path() + ".png"
-		data, err := mcassets.Files.ReadFile("templates/" + path)
+		data, err := mcassets.Read(path)
 		if err != nil {
 			return err
 		}
@@ -224,7 +202,7 @@ func (importer *templateImporter) textures() error {
 		if err := os.WriteFile(destination, data, 0644); err != nil {
 			return err
 		}
-		importer.snapshot.Textures[id] = asset.File{Path: relative, Origin: importer.index.Repository + "@" + importer.index.Revision + "/custom/" + path}
+		importer.snapshot.Textures[id] = asset.File{Path: relative, Origin: importer.index.TextureOrigin(path)}
 	}
 	return nil
 }

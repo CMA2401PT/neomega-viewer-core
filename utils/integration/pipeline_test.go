@@ -14,12 +14,13 @@ import (
 	"testing"
 
 	"neomega-assets/asset"
-	"neomega-assets/inventory"
+	"neomega-assets/parse"
 	"neomega-assets/s01_extract"
 	"neomega-assets/s02_patch"
 	"neomega-assets/s03_models"
 	"neomega-assets/s04_special"
 	"neomega-assets/s05_atlas"
+	"neomega-assets/utils/inventory"
 )
 
 func fixturePNG(t *testing.T, width, height int, paint func(int, int) color.NRGBA) []byte {
@@ -125,7 +126,7 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if _, err := s03_models.Run(s03_models.Options{InputDir: patched, OutputDir: models}); err != nil {
 		t.Fatal(err)
 	}
-	rawReport := readJSON[asset.ModelIndex](t, filepath.Join(models, "models.json"))
+	rawReport := readJSON[asset.ModelIndex](t, filepath.Join(models, "model-index.json"))
 	if len(rawReport.GeometrylessBlockStates) != 1 || rawReport.GeometrylessBlockStates[0] != "minecraft:chest" {
 		t.Fatalf("placeholder was not detected: %v", rawReport.GeometrylessBlockStates)
 	}
@@ -136,7 +137,7 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if plan := plans.Blocks["minecraft:chest"]; plan.Kind != asset.RendererSpecial || !plan.StaticPreview || len(plan.DynamicFields) == 0 {
 		t.Fatalf("chest render contract missing: %+v", plan)
 	}
-	completedReport := readJSON[asset.ModelIndex](t, filepath.Join(completed, "models.json"))
+	completedReport := readJSON[asset.ModelIndex](t, filepath.Join(completed, "model-index.json"))
 	if len(completedReport.GeometrylessBlockStates) != 0 {
 		t.Fatal("chest still has no geometry")
 	}
@@ -181,12 +182,34 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		}
 		occupied = append(occupied, rect)
 	}
-	tables := readJSON[asset.Tables](t, filepath.Join(output, "blockStatesModels.json"))
-	base := tables.Models["latest"]["block/cube_all"]
+	parsed, err := parse.Load(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := parsed.BlockState("minecraft:stone"); !ok {
+		t.Fatal("parser could not look up a canonical vanilla block ID")
+	}
+	if _, ok := parsed.Model("demo:block/panel"); !ok {
+		t.Fatal("parser lost the non-vanilla model namespace")
+	}
+	rect, ok := parsed.TextureRect("demo:entity/panel")
+	if !ok || rect.Dx() != 48 || rect.Dy() != 32 || !rect.In(parsed.AtlasImage.Bounds()) {
+		t.Fatalf("parser returned the wrong entity pixel rectangle: %v", rect)
+	}
+	for _, name := range []string{"blockstates.json", "models.json", "blocksAtlases.json"} {
+		fields := readJSON[map[string]json.RawMessage](t, filepath.Join(output, name))
+		if _, ok := fields["latest"]; ok {
+			t.Fatalf("%s still has the legacy version envelope", name)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(output, "blockStatesModels.json")); !os.IsNotExist(err) {
+		t.Fatal("legacy combined output still exists")
+	}
+	base := parsed.Models["block/cube_all"]
 	if (*base.Elements)[0].ShadeDirectionOverride != "north" {
 		t.Fatal("modern shading direction lost")
 	}
-	model := tables.Models["latest"]["block/stone"]
+	model := parsed.Models["block/stone"]
 	binding := model.Textures["all"]
 	if !binding.Object || binding.ForceTranslucent == nil || !*binding.ForceTranslucent {
 		t.Fatal("modern texture material information lost")
@@ -194,11 +217,11 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if _, ok := model.Extra["texture_size"]; !ok {
 		t.Fatal("unknown model extension lost")
 	}
-	choice := tables.BlockStates["latest"]["stone"].Variants[""]
+	choice := parsed.BlockStates["stone"].Variants[""]
 	if !choice.Array || len(choice.Options) != 2 || *choice.Options[0].Weight != 2 {
 		t.Fatal("weighted alternatives lost")
 	}
-	if tables.BlockStates["latest"]["demo:panel"].Multipart[0].When.OR[1].AND[1].Properties["lit"] != "true" {
+	if parsed.BlockStates["demo:panel"].Multipart[0].When.OR[1].AND[1].Properties["lit"] != "true" {
 		t.Fatal("nested multipart condition lost")
 	}
 	if _, err := os.Stat(filepath.Join(output, "THIRD_PARTY_NOTICES.txt")); err != nil {

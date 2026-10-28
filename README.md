@@ -4,7 +4,7 @@
 
 理解整个流程，只需要先记住：**方块状态选择模型，模型引用纹理，图集坐标表告诉渲染器去 PNG 的哪里取这张纹理。** 但箱子、旗帜等方块的外形由游戏代码绘制，JAR 中没有完整方块模型。本工具为它们补充静态预览，并用另一张表说明完整渲染还需要什么数据。
 
-一次构建处理一个版本。本文以 **Minecraft Java 26.3** 为例，版本来自 [Mojang 官方版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)。输出中的 `latest` 表示本次选择的单个版本。
+一次构建处理一个版本。本文以 **Minecraft Java 26.3** 为例，版本来自 [Mojang 官方版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)。版本信息记录在 `build-info.json` 中，数据表直接保存这个版本的内容。
 
 ## 先得到一份输出
 
@@ -24,16 +24,33 @@ go run ./cmd/neomega-assets build -jar /path/to/client.jar
 
 希望跟随最新正式版时，用 `-version latest`。需要复现结果时，指定版本或固定的本地 JAR。
 
-完成后，`dist` 中有四份配套产物：
+完成后，`dist/final` 中有五份配套产物：
 
 | 文件 | 它回答的问题 |
 |---|---|
-| `blockStatesModels.json` | 方块状态选择哪些模型？模型的几何、继承和纹理引用是什么？ |
+| `blockstates.json` | 方块状态选择哪些模型？ |
+| `models.json` | 模型的几何、继承和纹理引用是什么？ |
 | `blockRenderers.json` | 可以使用静态模型吗？完整外观还依赖什么渲染方式和运行时数据？ |
 | `blocksAtlases.json` | 每张纹理在图集中的位置和尺寸是什么？ |
 | `blocksAtlasLatest.png` | 坐标表指向的实际像素在哪里？ |
 
-这四份文件应整组使用。`build-info.json` 记录版本、来源和数量；`THIRD_PARTY_NOTICES.txt` 保存来源与许可声明。`.cache`、`work`、`dist` 已加入 `.gitignore`。
+这五份文件应整组使用。`build-info.json` 记录版本、来源和数量；`THIRD_PARTY_NOTICES.txt` 保存来源与许可声明。下载缓存在 `.cache`，中间生成文件在 `dist/works`，交付文件在 `dist/final`。`.cache` 与 `dist` 已加入 `.gitignore`。
+
+## 读取交付文件
+
+拿到输出后，消费者只需要 `dist/final`。`blockstates.json` 与 `models.json` 的根对象分别是资源名到定义的映射；`blocksAtlases.json` 的根对象直接包含 `textures`、尺寸和 UV 比例。这些文件没有 `latest` 层，也没有额外的合并文件。
+
+可以先运行独立的解析示例，确认应用会读到什么：
+
+```sh
+go run ./parse/cli -dir dist/final
+go run ./parse/cli -dir dist/final \
+  -block minecraft:chest \
+  -model minecraft:block/stone \
+  -texture minecraft:entity/chest/normal
+```
+
+示例读取全部表格和 PNG，再输出数量、指定方块的模型选择与渲染需求、模型定义和纹理像素范围。在 Go 应用中使用 `parse.Load`，或者只读取需要的单张表。示例代码和完整用法见 [parse/README.md](parse/README.md)。
 
 ## 为什么分成五步
 
@@ -43,19 +60,19 @@ go run ./cmd/neomega-assets build -jar /path/to/client.jar
 客户端 JAR
   │
   ├─ s01_extract：提取资源，建立索引
-  │      → work/01-extracted
+  │      → dist/works/01-extracted
   │
   ├─ s02_patch：应用显式资源覆盖，加入诊断方块
-  │      → work/02-patched
+  │      → dist/works/02-patched
   │
   ├─ s03_models：整理模型关系，找出没有几何的方块
-  │      → work/03-models
+  │      → dist/works/03-models
   │
   ├─ s04_special：补充特殊方块预览，说明渲染需求
-  │      → work/04-renderers
+  │      → dist/works/04-renderers
   │
   └─ s05_atlas：收集所需纹理，生成坐标和 PNG
-         → dist
+         → dist/final
 ```
 
 中间文件是步骤之间的接口。修改覆盖包后，可以从第二步继续。修改特殊方块处理后，可以从第四步继续。
@@ -68,7 +85,7 @@ go run ./cmd/neomega-assets build -jar /path/to/client.jar
 go run ./cmd/neomega-assets fetch -version 26.3
 go run ./cmd/neomega-assets extract \
   -jar .cache/26.3/client.jar \
-  -out work/01-extracted
+  -out dist/works/01-extracted
 ```
 
 范围包括 `assets/<namespace>/blockstates`、`models`、纹理 PNG 和旁边的 `.png.mcmeta` 元数据。目录层级和命名空间会保留。
@@ -83,8 +100,8 @@ go run ./cmd/neomega-assets extract \
 
 ```sh
 go run ./cmd/neomega-assets patch \
-  -in work/01-extracted \
-  -out work/02-patched
+  -in dist/works/01-extracted \
+  -out dist/works/02-patched
 ```
 
 没有覆盖包时，它复制原始资源，并加入 `unknown`、`errored` 两个诊断方块及程序生成的纹理。
@@ -102,8 +119,8 @@ my-pack/
 
 ```sh
 go run ./cmd/neomega-assets patch \
-  -in work/01-extracted \
-  -out work/02-patched \
+  -in dist/works/01-extracted \
+  -out dist/works/02-patched \
   -overlay ./my-pack
 ```
 
@@ -119,11 +136,11 @@ go run ./cmd/neomega-assets patch \
 
 ```sh
 go run ./cmd/neomega-assets models \
-  -in work/02-patched \
-  -out work/03-models
+  -in dist/works/02-patched \
+  -out dist/works/03-models
 ```
 
-这一步生成 `blockStatesModels.json` 和检查报告 `models.json`。它检查方块实际引用的模型、父模型和纹理变量，遇到缺失模型或循环时报告资源名。报告列出需要的纹理，并在 `geometrylessBlockStates` 中列出没有任何面的方块。
+这一步生成 `blockstates.json`、`models.json`，以及独立的检查报告 `model-index.json`。它检查方块实际引用的模型、父模型和纹理变量，遇到缺失模型或循环时报告资源名。报告列出需要的纹理，并在 `geometrylessBlockStates` 中列出没有任何面的方块。
 
 **没有缺失引用，不代表方块已经能显示。** 26.3 的原始资源中有 96 种方块没有几何。箱子可能只有粒子纹理；空气本来就不可见；水则需要根据邻居生成表面。仅统计 `builtin/...` 父模型识别不了这些情况，这也是第四步存在的原因。
 
@@ -141,14 +158,16 @@ go run ./cmd/neomega-assets models \
 
 ```sh
 go run ./cmd/neomega-assets special \
-  -in work/02-patched \
-  -models work/03-models \
-  -out work/04-renderers
+  -in dist/works/02-patched \
+  -models dist/works/03-models \
+  -out dist/works/04-renderers
 ```
 
 这一步使用随工具附带的 `mc-assets` 社区模板，为箱子、潜影盒、旗帜、头颅、饰纹陶罐、铜傀儡雕像、潮涌核心和末地传送门等补充静态模型。模板及其依赖按需导入 `neomega:` 命名空间，避免替换 JAR 的原生模型。26.3 已有的床、告示牌等几何直接保留。染色潜影盒选择对应颜色的实际皮肤。
 
-模板的来源提交、文件映射和作者声明见 [third_party/mc-assets/README.md](third_party/mc-assets/README.md)。生成结果会记录每个模板的来源，并保留模型里的原始署名。
+这些模板、纹理和无法从 JAR 推导的渲染规则集中在 [resources](resources/README.md)。它们是需要手工维护的输入资料。s04 负责应用规则、导入依赖和检查结果；仅 `minecraft:air` 的处理直接留在步骤代码中。
+
+模板的来源提交、文件映射和作者声明见 [resources/third_party/mc-assets/README.md](resources/third_party/mc-assets/README.md)。生成结果会记录每个模板的来源，并保留模型里的原始署名。
 
 消费者需要知道如何使用这些结果，因此新表按方块资源 ID 给出以下分类：
 
@@ -164,11 +183,11 @@ go run ./cmd/neomega-assets special \
 
 为让专用渲染器也有素材可用，`familyTextures` 保留相应纹理族，包括静态预览未直接引用的箱子皮肤、旗帜图案等。它们也会进入第五步的图集。
 
-新表的键始终包含命名空间，例如 `minecraft:chest`。旧格式模型表则省略默认的 `minecraft:`。消费者从模型表查找新表时，需要先恢复默认命名空间。
+渲染说明表的键始终包含命名空间，例如 `minecraft:chest`。方块状态表和模型表省略默认的 `minecraft:`。`parse` 的查询方法接收完整资源 ID，并自动转换为相应表的键。
 
 遇到未识别的无几何方块时，这一步报错，并给出资源 ID。新增游戏方块后，应先判断它属于静态模型、流体还是其他渲染方式，再增加相应支持。
 
-实现入口：[s04_special/special.go](s04_special/special.go)；分类与运行时需求见 [s04_special/profiles.go](s04_special/profiles.go)，表类型见 [asset/render.go](asset/render.go)。
+实现入口：[s04_special/special.go](s04_special/special.go)；分类、运行时需求与模板适配规则见 [resources/special.go](resources/special.go)，表类型见 [asset/render.go](asset/render.go)。
 
 ## 第五步：把所需纹理放进图集
 
@@ -176,16 +195,16 @@ go run ./cmd/neomega-assets special \
 
 ```sh
 go run ./cmd/neomega-assets atlas \
-  -in work/04-renderers \
-  -models work/04-renderers \
-  -out dist
+  -in dist/works/04-renderers \
+  -models dist/works/04-renderers \
+  -out dist/final
 ```
 
 普通方块纹理缩放到默认的 16×16 格子。实体类纹理保留原始尺寸。动画纹理取 `frames` 指定的首帧；没有显式列表时取第 0 帧。PNG 是静态采样结果。
 
 装箱先放大纹理，再填入其留下的格子空隙，放不下时扩大图集。图集为正方形的二次幂尺寸，相同输入产生稳定布局。坐标 `u/v/su/sv` 相对于整个 PNG 归一化：例如宽 1024 像素的图集中，横坐标 32、宽 16 的纹理对应 `u=32/1024`、`su=16/1024`。
 
-这一步同时导出模型表、渲染说明、坐标表和 PNG，防止消费者把不同构建的文件混用。
+这一步同时导出方块状态表、模型表、渲染说明、坐标表和 PNG，防止消费者把不同构建的文件混用。
 
 实现入口：[s05_atlas/atlas.go](s05_atlas/atlas.go)。
 
@@ -198,11 +217,11 @@ go run ./cmd/neomega-assets atlas \
 ```sh
 go run ./cmd/neomega-assets audit \
   -baseline ../mc-viewer-svelte/src/lib/Viewer/generate_res/mc-assets \
-  -current dist \
-  -snapshot work/01-extracted \
-  -raw-models work/03-models \
-  -completed work/04-renderers \
-  -out audits/26.3-vs-viewer.json
+  -current dist/final \
+  -snapshot dist/works/01-extracted \
+  -raw-models dist/works/03-models \
+  -completed dist/works/04-renderers \
+  -out resources/audits/26.3-vs-viewer.json
 ```
 
 这条命令检查原始 JAR 的方块纹理是否全部收录、所需纹理是否存在、PNG 尺寸与坐标是否一致，并比较补全前后的几何覆盖。全部差异名称保存在 JSON 中。**它检查资源覆盖，不等同于运行游戏渲染器逐像素比对外观。**
@@ -222,11 +241,11 @@ go run ./cmd/neomega-assets audit \
 
 模型统计包含 block/item 模型及导入的模板依赖；PNG 统计包含实体与其他类别，因此这些数量不应相等。输出状态额外包含两个诊断方块。
 
-旧 viewer 图集中的 379 个名称在 26.3 JAR 中已不存在，其中包括历史名称和旧版纹理布局。不能用旧图集的名称集合直接要求单版本输出。具体核对结果见 [audits/README.md](audits/README.md)。
+旧 viewer 图集中的 379 个名称在 26.3 JAR 中已不存在，其中包括历史名称和旧版纹理布局。不能用旧图集的名称集合直接要求单版本输出。具体核对结果见 [resources/audits/README.md](resources/audits/README.md)。
 
 ## 与 mc-viewer-svelte 衔接
 
-资源生成完整之后，还需要消费者理解相应格式。模型表的 `latest` 层、默认命名空间省略方式、图集文件名和 UV 字段沿用 `mc-assets` 的约定；`blockRenderers.json` 是补充的消费接口。
+资源生成完整之后，还需要消费者理解相应格式。资源命名、图集文件名和 UV 字段参考 `mc-assets`，但本工具交付拆开的单版本表。旧 viewer 读取的合并文件和 `latest` 包装层需要改为读取 `blockstates.json`、`models.json` 与展开的 `blocksAtlases.json`。`blockRenderers.json` 补充特殊渲染需求。
 
 当前 viewer 的方块状态数据仍基于 Java `1.20.2`，旧模型解析器只理解字符串纹理。26.3 还包含 `sprite` 材质对象、新旋转字段和 `shade_direction_override` 光照方向。要完整显示最新资源，需要同步升级 viewer 的状态数据与模型消费者，并接入新表对流体、动态和特殊外观的说明。
 
@@ -245,9 +264,9 @@ import (
 
 func complete(ctx context.Context) error {
     _, err := s04_special.Run(ctx, s04_special.Options{
-        InputDir:  "work/02-patched",
-        ModelDir:  "work/03-models",
-        OutputDir: "work/04-renderers",
+        InputDir:  "dist/works/02-patched",
+        ModelDir:  "dist/works/03-models",
+        OutputDir: "dist/works/04-renderers",
     })
     return err
 }
@@ -255,7 +274,7 @@ func complete(ctx context.Context) error {
 
 其他步骤同样提供 `Options` 和 `Run`。较长的文件处理接收 `context.Context`，便于取消。
 
-扩展前先判断变化属于哪个问题：资源替换放在第二步的覆盖包；新模型字段放在 `asset` 类型和第三步解析；新特殊渲染需求放在第四步分类及模板；纹理采样和排列放在第五步。更新附带模板时，应同步更新来源索引、作者声明与许可文件，并重跑资源核对。
+扩展前先判断变化属于哪个问题：资源替换放在第二步的覆盖包；新模型字段放在 `asset` 类型和第三步解析；新特殊渲染需求和模板适配放在 `resources/special.go`，附带模板放在 `resources/third_party`，由第四步应用；纹理采样和排列放在第五步。更新附带模板时，应同步更新来源索引、作者声明与许可文件，并重跑资源核对。
 
 ## 验证实现
 
@@ -266,10 +285,10 @@ go test -race ./...
 go vet ./...
 ```
 
-测试现场创建小型 JAR 和 PNG，覆盖五步产物、箱子占位模型补全、未知空模型报错、命名空间、资源覆盖、模型继承、26.3 纹理对象、加权候选、逻辑条件、动画首帧、图集空隙利用和像素坐标。测试不访问网络。
+测试位于 `utils/integration` 与各步骤目录。测试现场创建小型 JAR 和 PNG，覆盖最终文件解析、五步产物、箱子占位模型补全、未知空模型报错、命名空间、资源覆盖、模型继承、26.3 纹理对象、加权候选、逻辑条件、动画首帧、图集空隙利用和像素坐标。测试不访问网络。
 
 ## 来源与许可
 
-分步思路参考本工作区的 `my-mc-assets`。模型表与图集约定、特殊方块模板参考或取自 [zardoy/mc-assets](https://github.com/zardoy/mc-assets)，固定在提交 `c63d6dacd358a8ea73b453d6958167b49dcc3f6c`。模板包含 86 份方块状态、147 份依赖模型和 17 张自定义纹理，原始模型署名保留在 JSON 中。对应关系和修改说明见 [NOTICE.md](NOTICE.md) 与 [模板说明](third_party/mc-assets/README.md)。
+分步思路参考本工作区的 `my-mc-assets`。模型表与图集约定、特殊方块模板参考或取自 [zardoy/mc-assets](https://github.com/zardoy/mc-assets)，固定在提交 `c63d6dacd358a8ea73b453d6958167b49dcc3f6c`。模板包含 86 份方块状态、147 份依赖模型和 17 张自定义纹理，原始模型署名保留在 JSON 中。对应关系和修改说明见 [NOTICE.md](NOTICE.md) 与 [模板说明](resources/third_party/mc-assets/README.md)。
 
-工具源码按 [MIT](LICENSE) 提供。上游 MIT 原文保存在 [third_party/mc-assets/LICENSE](third_party/mc-assets/LICENSE)。Minecraft 原始素材及其衍生纹理保留原权利人的权利；工具和上游代码的 MIT 声明不等于这些素材的再发布授权。分发生成结果时，应核对 [Minecraft EULA](https://www.minecraft.net/eula)、[Usage Guidelines](https://www.minecraft.net/usage-guidelines) 和覆盖包作者条款，并保留对应声明。
+工具源码按 [MIT](LICENSE) 提供。上游 MIT 原文保存在 [resources/third_party/mc-assets/LICENSE](resources/third_party/mc-assets/LICENSE)。Minecraft 原始素材及其衍生纹理保留原权利人的权利；工具和上游代码的 MIT 声明不等于这些素材的再发布授权。分发生成结果时，应核对 [Minecraft EULA](https://www.minecraft.net/eula)、[Usage Guidelines](https://www.minecraft.net/usage-guidelines) 和覆盖包作者条款，并保留对应声明。

@@ -18,7 +18,7 @@ JAR 中有一部分方块由游戏代码绘制，普通模型文件只有占位�
 
 ## 为什么导入时还需要适配
 
-模板的资源名与最新 JAR 并不完全相同，直接覆盖可能破坏已经存在的原生模型。因此导入器执行以下处理：
+模板的资源名与最新 JAR 并不完全相同，直接覆盖可能破坏已经存在的原生模型。对应适配规则集中在 [resources/special.go](../../special.go)，由第四步导入器应用：
 
 - 只对缺少几何的方块使用模板，依赖模型移到 `neomega:` 命名空间。
 - 规范化模型和纹理引用，将旧 `entity/banner_base` 路径映射到 `entity/banner/banner_base`。
@@ -36,4 +36,4 @@ JAR 中有一部分方块由游戏代码绘制，普通模型文件只有占位�
 - `Made with Blockbench`
 - `Made with Blockbench by TyBraniff for Bluemaps support.`
 
-Minecraft 原始素材及衍生纹理保留原权利人的权利。上述 MIT 声明不能替代 Minecraft 素材本身的使用与分发条款。仓库整体的来源与分发说明见 [NOTICE.md](../../NOTICE.md)。
+Minecraft 原始素材及衍生纹理保留原权利人的权利。上述 MIT 声明不能替代 Minecraft 素材本身的使用与分发条款。仓库整体的来源与分发说明见 [NOTICE.md](../../../NOTICE.md)。

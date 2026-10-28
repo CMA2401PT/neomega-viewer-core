@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Package s05_atlas creates the PNG and the coordinate table as one pair.
-// mc-assets UV names and envelope are MIT-derived compatibility conventions;
+// mc-assets UV names are MIT-derived compatibility conventions;
 // packing and PNG processing are implemented here with Go's standard library.
 package s05_atlas
 
@@ -16,8 +16,9 @@ import (
 	"strings"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
-	"neomega-assets/legal"
+	"neomega-assets/utils/jsonfile"
+	"neomega-assets/utils/legal"
+	"neomega-assets/utils/resourcefiles"
 )
 
 type Options struct {
@@ -42,7 +43,7 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 	if err != nil {
 		return nil, err
 	}
-	report, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.ModelDir, "models.json"))
+	report, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.ModelDir, "model-index.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -136,22 +137,13 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 	if closeErr != nil {
 		return nil, closeErr
 	}
-	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "blocksAtlases.json"), asset.Atlases{Latest: atlas}); err != nil {
+	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "blocksAtlases.json"), atlas); err != nil {
 		return nil, err
 	}
-	table, err := os.ReadFile(filepath.Join(opt.ModelDir, "blockStatesModels.json"))
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join(opt.OutputDir, "blockStatesModels.json"), table, 0644); err != nil {
-		return nil, err
-	}
-	rendererData, err := os.ReadFile(filepath.Join(opt.ModelDir, "blockRenderers.json"))
-	if err != nil {
-		return nil, err
-	}
-	if err := os.WriteFile(filepath.Join(opt.OutputDir, "blockRenderers.json"), rendererData, 0644); err != nil {
-		return nil, err
+	for _, name := range []string{"blockstates.json", "models.json", "blockRenderers.json"} {
+		if err := resourcefiles.CopyFile(filepath.Join(opt.ModelDir, name), filepath.Join(opt.OutputDir, name)); err != nil {
+			return nil, err
+		}
 	}
 	build := asset.BuildInfo{GeometrylessBlockStates: report.GeometrylessBlockStates, RendererCounts: renderers.Counts, Version: snapshot.Version, Sources: snapshot.Sources, BlockStateCount: report.BlockStateCount, ModelCount: report.ModelCount, TextureCount: len(images), BuiltinModels: report.BuiltinModels}
 	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "build-info.json"), build); err != nil {

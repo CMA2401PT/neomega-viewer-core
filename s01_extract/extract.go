@@ -14,7 +14,7 @@ import (
 	"strings"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
+	"neomega-assets/utils/jsonfile"
 )
 
 type Options struct {

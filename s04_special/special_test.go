@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
-	mcassets "neomega-assets/third_party/mc-assets"
+	mcassets "neomega-assets/resources/third_party/mc-assets"
+	"neomega-assets/utils/jsonfile"
 )
 
 func TestKnownNonModelRenderersAreExplicit(t *testing.T) {
@@ -39,9 +39,9 @@ func TestUnrecognizedEmptyModelDoesNotPassAsComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	index := asset.ModelIndex{Version: "fixture", GeometrylessBlockStates: []asset.ID{"demo:ghost"}}
-	jsonfile.Write(filepath.Join(models, "models.json"), index)
-	tables := asset.Tables{BlockStates: map[string]map[string]asset.BlockState{"latest": {"demo:ghost": {Variants: map[string]asset.Choice{"": {Options: []asset.Apply{{Model: "demo:block/ghost"}}}}}}}}
-	jsonfile.Write(filepath.Join(models, "blockStatesModels.json"), tables)
+	jsonfile.Write(filepath.Join(models, "model-index.json"), index)
+	blockstates := asset.BlockStates{"demo:ghost": {Variants: map[string]asset.Choice{"": {Options: []asset.Apply{{Model: "demo:block/ghost"}}}}}}
+	jsonfile.Write(filepath.Join(models, "blockstates.json"), blockstates)
 	_, err := Run(context.Background(), Options{InputDir: input, ModelDir: models, OutputDir: filepath.Join(root, "completed")})
 	if err == nil || !strings.Contains(err.Error(), "demo:ghost") {
 		t.Fatalf("unrecognized geometry-less block did not fail clearly: %v", err)

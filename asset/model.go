@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Model shapes follow Minecraft resource JSON; compatibility conventions are
-// informed by mc-assets (MIT). See NOTICE.md and third_party/mc-assets/LICENSE.
+// informed by mc-assets (MIT). See NOTICE.md and resources/third_party/mc-assets/LICENSE.
 package asset
 
 import (
@@ -267,14 +267,12 @@ func (state BlockState) Applications() []Apply {
 	return applications
 }
 
-// Tables uses the mc-assets envelope. A single input version occupies latest.
-// Names inside are export names (vanilla minecraft: is omitted).
-type Tables struct {
-	HardcodedModels map[string]string                `json:"hardcodedModels"`
-	BlockStates     map[string]map[string]BlockState `json:"blockstates"`
-	Models          map[string]map[string]Model      `json:"models"`
-	LatestRootItems []string                         `json:"latestRootItems"`
-}
+// BlockStates maps export names (the default minecraft: namespace is omitted)
+// to model choices. A build contains one version, so no version envelope is used.
+type BlockStates map[string]BlockState
+
+// Models maps export names to model definitions, preserving parent references.
+type Models map[string]Model
 
 type ModelIndex struct {
 	// Empty geometry can be intentional (air/fluids) or require a special renderer.

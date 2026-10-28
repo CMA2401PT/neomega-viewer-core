@@ -53,10 +53,6 @@ type Atlas struct {
 	SUSV     float64                 `json:"suSv"`
 }
 
-type Atlases struct {
-	Latest Atlas `json:"latest"`
-}
-
 type BuildInfo struct {
 	GeometrylessBlockStates []ID                 `json:"geometrylessBlockStates"`
 	RendererCounts          map[RendererKind]int `json:"rendererCounts"`

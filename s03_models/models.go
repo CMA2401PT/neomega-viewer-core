@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 // Package s03_models builds typed model/blockstate tables from patched assets.
-// mc-assets export naming/envelope conventions are retained under MIT; see NOTICE.md.
+// Resource naming follows mc-assets (MIT); each output is a single-version table.
 package s03_models
 
 import (
@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
+	"neomega-assets/utils/jsonfile"
 )
 
 type Options struct {
@@ -193,7 +193,6 @@ func Run(opt Options) (*asset.ModelIndex, error) {
 	resolver := NewResolver(models)
 	required := map[asset.ID]bool{}
 	builtins := map[asset.ID]bool{}
-	hardcoded := map[string]string{}
 	geometryless := []asset.ID{}
 	for block, state := range states {
 		visible := false
@@ -204,7 +203,6 @@ func Run(opt Options) (*asset.ModelIndex, error) {
 			}
 			if model.Builtin != "" {
 				builtins[application.Model] = true
-				hardcoded[application.Model.ExportName()] = model.Builtin.ExportName()
 			}
 			for _, element := range model.Elements {
 				if len(element.Faces) > 0 {
@@ -233,17 +231,21 @@ func Run(opt Options) (*asset.ModelIndex, error) {
 	}
 	slices.Sort(report.RequiredTextures)
 	slices.Sort(report.BuiltinModels)
-	tables := asset.Tables{HardcodedModels: hardcoded, BlockStates: map[string]map[string]asset.BlockState{"latest": {}}, Models: map[string]map[string]asset.Model{"latest": {}}, LatestRootItems: []string{}}
+	modelTable := asset.Models{}
+	blockstates := asset.BlockStates{}
 	for id, model := range models {
-		tables.Models["latest"][id.ExportName()] = exportModel(model)
+		modelTable[id.ExportName()] = exportModel(model)
 	}
 	for id, state := range states {
-		tables.BlockStates["latest"][id.ExportName()] = exportState(state)
+		blockstates[id.ExportName()] = exportState(state)
 	}
-	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "blockStatesModels.json"), tables); err != nil {
+	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "blockstates.json"), blockstates); err != nil {
 		return nil, err
 	}
-	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "models.json"), report); err != nil {
+	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "models.json"), modelTable); err != nil {
+		return nil, err
+	}
+	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "model-index.json"), report); err != nil {
 		return nil, err
 	}
 	return report, nil

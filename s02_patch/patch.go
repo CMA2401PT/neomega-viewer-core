@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
-	"neomega-assets/internal/resourcefiles"
 	"neomega-assets/s01_extract"
+	"neomega-assets/utils/jsonfile"
+	"neomega-assets/utils/resourcefiles"
 )
 
 type Options struct {

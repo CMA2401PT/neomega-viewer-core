@@ -1,6 +1,6 @@
 {
   "baseline": "../mc-viewer-svelte/src/lib/Viewer/generate_res/mc-assets",
-  "current": "dist",
+  "current": "dist/final",
   "version": "26.3",
   "baselineTextures": 1408,
   "currentTextures": 1464,

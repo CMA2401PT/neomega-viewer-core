@@ -10,13 +10,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
-	"neomega-assets/internal/resourcefiles"
+	"neomega-assets/resources"
+	mcassets "neomega-assets/resources/third_party/mc-assets"
 	"neomega-assets/s03_models"
-	mcassets "neomega-assets/third_party/mc-assets"
+	"neomega-assets/utils/jsonfile"
+	"neomega-assets/utils/resourcefiles"
 )
 
 type Options struct {
@@ -41,11 +41,11 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 	if err != nil {
 		return nil, err
 	}
-	report, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.ModelDir, "models.json"))
+	report, err := jsonfile.Read[asset.ModelIndex](filepath.Join(opt.ModelDir, "model-index.json"))
 	if err != nil {
 		return nil, err
 	}
-	tables, err := jsonfile.Read[asset.Tables](filepath.Join(opt.ModelDir, "blockStatesModels.json"))
+	blockstates, err := jsonfile.Read[asset.BlockStates](filepath.Join(opt.ModelDir, "blockstates.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 		empty[id] = true
 	}
 	templated := false
-	for name, state := range tables.BlockStates["latest"] {
+	for name, state := range blockstates {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
@@ -88,23 +88,18 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 		if err != nil {
 			return nil, err
 		}
-		profile := asset.BlockRenderer{Kind: asset.RendererModel, StaticPreview: true, StateProperties: stateProperties(state)}
+		var profile asset.BlockRenderer
 		if !empty[id] {
-			if strings.HasSuffix(id.Path(), "_sign") {
-				profile.Family = "sign"
-				profile.DynamicFields = []string{"frontText", "backText"}
-			}
+			profile = resources.ModelRenderer(id)
 		} else if known, ok := classifyEmpty(id); ok {
 			profile = known
-			profile.StateProperties = stateProperties(state)
 		} else {
 			state, err = importer.state(id)
 			if err != nil {
 				return nil, fmt.Errorf("block has no static geometry or supported renderer: %w", err)
 			}
-			profile = specialProfile(id)
-			profile.StateProperties = stateProperties(state)
-			profile.TemplateSource = index.Repository + "@" + index.Revision + "/custom/blockentities/latest/blockStates/" + strings.TrimPrefix(index.States[id], "states/")
+			profile = resources.SpecialRenderer(id)
+			profile.TemplateSource = index.StateOrigin(id)
 			relative := "assets/" + id.Namespace() + "/blockstates/" + id.Path() + ".json"
 			if err := jsonfile.Write(filepath.Join(opt.OutputDir, filepath.FromSlash(relative)), state); err != nil {
 				return nil, err
@@ -112,6 +107,7 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 			snapshot.BlockStates[id] = asset.File{Path: relative, Origin: profile.TemplateSource}
 			templated = true
 		}
+		profile.StateProperties = stateProperties(state)
 		renderers.Blocks[id] = profile
 		renderers.Counts[profile.Kind]++
 	}
@@ -119,26 +115,18 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 		if err := importer.textures(); err != nil {
 			return nil, err
 		}
-		snapshot.Sources = append(snapshot.Sources, asset.Source{Kind: "community-static-previews", Location: index.Repository + "/tree/" + index.Revision + "/custom", License: "MIT; original model credits retained; Minecraft-derived material retains original rights"})
+		snapshot.Sources = append(snapshot.Sources, index.Source())
 	}
 	renderers.Sources = snapshot.Sources
+	families := map[string]bool{}
 	for _, profile := range renderers.Blocks {
-		if _, exists := renderers.FamilyTextures[profile.Family]; exists {
+		if families[profile.Family] {
 			continue
 		}
-		prefixes := familyPrefixes[profile.Family]
-		if len(prefixes) == 0 {
-			continue
-		}
+		families[profile.Family] = true
 		for id := range snapshot.Textures {
-			if id.Namespace() != "minecraft" {
-				continue
-			}
-			for _, prefix := range prefixes {
-				if strings.HasPrefix(id.Path(), prefix) {
-					renderers.FamilyTextures[profile.Family] = append(renderers.FamilyTextures[profile.Family], id)
-					break
-				}
+			if resources.FamilyUsesTexture(profile.Family, id) {
+				renderers.FamilyTextures[profile.Family] = append(renderers.FamilyTextures[profile.Family], id)
 			}
 		}
 		slices.Sort(renderers.FamilyTextures[profile.Family])
@@ -175,7 +163,7 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 			return nil, fmt.Errorf("static preview for %s has no geometry", id)
 		}
 	}
-	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "models.json"), completed); err != nil {
+	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "model-index.json"), completed); err != nil {
 		return nil, err
 	}
 	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "blockRenderers.json"), renderers); err != nil {

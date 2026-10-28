@@ -10,13 +10,13 @@ import (
 	"os/signal"
 	"path/filepath"
 
-	"neomega-assets/fetch"
-	"neomega-assets/inventory"
 	"neomega-assets/s01_extract"
 	"neomega-assets/s02_patch"
 	"neomega-assets/s03_models"
 	"neomega-assets/s04_special"
 	"neomega-assets/s05_atlas"
+	"neomega-assets/utils/fetch"
+	"neomega-assets/utils/inventory"
 )
 
 type paths []string
@@ -45,7 +45,7 @@ func run(ctx context.Context, args []string) error {
 		return nil
 	case "extract":
 		jar := flags.String("jar", "", "local client JAR")
-		output := flags.String("out", "work/01-extracted", "extracted assets and snapshot.json")
+		output := flags.String("out", "dist/works/01-extracted", "extracted assets and snapshot.json")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -59,8 +59,8 @@ func run(ctx context.Context, args []string) error {
 		fmt.Printf("s01: %s, %d blockstates, %d models, %d PNGs -> %s\n", snapshot.Version, len(snapshot.BlockStates), len(snapshot.Models), len(snapshot.Textures), *output)
 		return nil
 	case "patch":
-		input := flags.String("in", "work/01-extracted", "extracted snapshot directory")
-		output := flags.String("out", "work/02-patched", "patched snapshot directory")
+		input := flags.String("in", "dist/works/01-extracted", "extracted snapshot directory")
+		output := flags.String("out", "dist/works/02-patched", "patched snapshot directory")
 		flags.Var(&overlays, "overlay", "resource pack directory; may be repeated, last wins")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
@@ -72,8 +72,8 @@ func run(ctx context.Context, args []string) error {
 		fmt.Printf("s02: %d blockstates, %d models -> %s\n", len(snapshot.BlockStates), len(snapshot.Models), *output)
 		return nil
 	case "models":
-		input := flags.String("in", "work/02-patched", "patched snapshot directory")
-		output := flags.String("out", "work/03-models", "model table and report directory")
+		input := flags.String("in", "dist/works/02-patched", "patched snapshot directory")
+		output := flags.String("out", "dist/works/03-models", "model table and report directory")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -84,9 +84,9 @@ func run(ctx context.Context, args []string) error {
 		fmt.Printf("s03: %d blockstates, %d models, %d referenced textures, %d geometryless blockstates -> %s\n", report.BlockStateCount, report.ModelCount, len(report.RequiredTextures), len(report.GeometrylessBlockStates), *output)
 		return nil
 	case "special":
-		input := flags.String("in", "work/02-patched", "patched snapshot directory")
-		models := flags.String("models", "work/03-models", "model table/report directory")
-		output := flags.String("out", "work/04-renderers", "completed models and renderer plans")
+		input := flags.String("in", "dist/works/02-patched", "patched snapshot directory")
+		models := flags.String("models", "dist/works/03-models", "model table/report directory")
+		output := flags.String("out", "dist/works/04-renderers", "completed models and renderer plans")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -97,9 +97,9 @@ func run(ctx context.Context, args []string) error {
 		fmt.Printf("s04: renderer counts %v -> %s\n", report.Counts, *output)
 		return nil
 	case "atlas":
-		input := flags.String("in", "work/04-renderers", "s04 completed snapshot directory")
-		models := flags.String("models", "work/04-renderers", "model table/report directory")
-		output := flags.String("out", "dist", "final output directory")
+		input := flags.String("in", "dist/works/04-renderers", "s04 completed snapshot directory")
+		models := flags.String("models", "dist/works/04-renderers", "model table/report directory")
+		output := flags.String("out", "dist/final", "final output directory")
 		tile := flags.Int("tile-size", 16, "block texture tile size, power of two")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
@@ -112,11 +112,11 @@ func run(ctx context.Context, args []string) error {
 		return nil
 	case "audit":
 		baseline := flags.String("baseline", "", "baseline mc-assets directory with tables")
-		current := flags.String("current", "dist", "current final output")
-		snapshot := flags.String("snapshot", "work/01-extracted", "original JAR snapshot")
-		raw := flags.String("raw-models", "work/03-models", "models before special previews")
-		completed := flags.String("completed", "work/04-renderers", "completed models/index")
-		output := flags.String("out", "audits/atlas-inventory.json", "inventory report path")
+		current := flags.String("current", "dist/final", "current final output")
+		snapshot := flags.String("snapshot", "dist/works/01-extracted", "original JAR snapshot")
+		raw := flags.String("raw-models", "dist/works/03-models", "models before special previews")
+		completed := flags.String("completed", "dist/works/04-renderers", "completed models/index")
+		output := flags.String("out", "resources/audits/atlas-inventory.json", "inventory report path")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
@@ -133,8 +133,8 @@ func run(ctx context.Context, args []string) error {
 		jar := flags.String("jar", "", "local JAR; when omitted fetch -version")
 		version := flags.String("version", "latest", "release ID when downloading")
 		cache := flags.String("cache", ".cache", "download directory")
-		work := flags.String("work", "work", "intermediate directories")
-		output := flags.String("out", "dist", "final output directory")
+		work := flags.String("work", "dist/works", "intermediate directories")
+		output := flags.String("out", "dist/final", "final output directory")
 		flags.Var(&overlays, "overlay", "resource pack directory; may be repeated, last wins")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err

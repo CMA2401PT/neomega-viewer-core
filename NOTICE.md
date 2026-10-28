@@ -7,7 +7,7 @@
 - 项目：[zardoy/mc-assets](https://github.com/zardoy/mc-assets)
 - 固定提交：`c63d6dacd358a8ea73b453d6958167b49dcc3f6c`
 - 上游声明：`Copyright 2024 Vitaly Turovsky, contributors`
-- 上游许可证：MIT，完整原文见 [third_party/mc-assets/LICENSE](third_party/mc-assets/LICENSE)。
+- 上游许可证：MIT，完整原文见 [resources/third_party/mc-assets/LICENSE](resources/third_party/mc-assets/LICENSE)。
 
 参考位置与实现的关系如下：
 
@@ -20,9 +20,9 @@
 
 下载、JAR 读取、模型图检查、PNG 处理和格子装箱由 Go 标准库实现。相关 Go 文件包含 SPDX 标识及来源注释。
 
-附带的素材保存在 [third_party/mc-assets/templates](third_party/mc-assets/templates)，包含 86 份方块状态模板、147 份依赖模型和 17 张自定义纹理。文件对应关系保存在 `index.json`。这些文件来自上述固定提交，原有模型署名保留，其中包括 `Made with Blockbench by TyBraniff for Bluemaps support.`。
+附带的素材保存在 [resources/third_party/mc-assets/templates](resources/third_party/mc-assets/templates)，包含 86 份方块状态模板、147 份依赖模型和 17 张自定义纹理。文件对应关系保存在 `index.json`。这些文件来自上述固定提交，原有模型署名保留，其中包括 `Made with Blockbench by TyBraniff for Bluemaps support.`。
 
-导入时会改写模型命名空间、规范化资源引用、适配旗帜纹理的新路径，并为染色潜影盒选择对应皮肤。完整说明见 [模板来源与适配](third_party/mc-assets/README.md)。这些适配不会改变原素材的权利来源。
+手工维护的分类与适配规则集中在 [resources/special.go](resources/special.go)，由第四步应用。导入时会改写模型命名空间、规范化资源引用、适配旗帜纹理的新路径，并为染色潜影盒选择对应皮肤。完整说明见 [模板来源与适配](resources/third_party/mc-assets/README.md)。这些适配不会改变原素材的权利来源。
 
 ## my-mc-assets
 

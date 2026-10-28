@@ -13,7 +13,7 @@ const (
 )
 
 // BlockRenderer separates static previews from state-dependent rendering. Static
-// previews use the augmented blockStatesModels table; DynamicFields are inputs
+// previews use the augmented blockstates and models tables; DynamicFields are inputs
 // required for the game's animated/customized appearance.
 type BlockRenderer struct {
 	Kind            RendererKind `json:"kind"`
@@ -26,7 +26,7 @@ type BlockRenderer struct {
 
 type Renderers struct {
 	Version string `json:"version"`
-	// Keys are canonical resource IDs, unlike the legacy model-table export names.
+	// Keys are canonical resource IDs, unlike blockstate/model export names.
 	Blocks         map[ID]BlockRenderer `json:"blocks"`
 	FamilyTextures map[string][]ID      `json:"familyTextures"`
 	Counts         map[RendererKind]int `json:"counts"`

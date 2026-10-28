@@ -12,11 +12,11 @@ PNG 看起来更空，可能来自排列、纹理尺寸或不同版本的资源�
 go run ./cmd/neomega-assets build -jar .cache/26.3/client.jar
 go run ./cmd/neomega-assets audit \
   -baseline ../mc-viewer-svelte/src/lib/Viewer/generate_res/mc-assets \
-  -current dist \
-  -snapshot work/01-extracted \
-  -raw-models work/03-models \
-  -completed work/04-renderers \
-  -out audits/26.3-vs-viewer.json
+  -current dist/final \
+  -snapshot dist/works/01-extracted \
+  -raw-models dist/works/03-models \
+  -completed dist/works/04-renderers \
+  -out resources/audits/26.3-vs-viewer.json
 ```
 
 JAR 可先通过 `go run ./cmd/neomega-assets fetch -version 26.3` 获得。报告中的“补全前”读取第三步原始模型，“补全后”读取最终产物。

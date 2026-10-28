@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"neomega-assets/asset"
-	"neomega-assets/internal/jsonfile"
+	"neomega-assets/utils/jsonfile"
 )
 
 // These two small diagnostic textures are generated here, not copied from a JAR.
