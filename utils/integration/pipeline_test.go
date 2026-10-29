@@ -85,9 +85,20 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		"assets/minecraft/models/block/cube_all.json":      []byte(`{"elements":[{"name":"test cube","shade_direction_override":"north","from":[0,0,0],"to":[16,16,16],"faces":{"north":{"texture":"#all"}}}]}`),
 		"assets/minecraft/models/block/stone.json":         []byte(`{"parent":"minecraft:block/cube_all","textures":{"all":{"sprite":"minecraft:block/stone","force_translucent":true}},"texture_size":[16,16]}`),
 		"assets/demo/blockstates/panel.json":               []byte(`{"multipart":[{"when":{"OR":[{"axis":"x"},{"AND":[{"axis":"y"},{"lit":true}]}]},"apply":{"model":"demo:block/panel"}}]}`),
-		"assets/demo/models/block/panel.json":              []byte(`{"textures":{"skin":"demo:entity/panel"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#skin"}}}]}`),
-		"assets/minecraft/textures/block/stone.png.mcmeta": []byte(`{"animation":{"frames":[{"index":1,"time":3},0]}}`),
+		"assets/demo/models/block/panel.json":              []byte(`{"textures":{"skin":"demo:entity/panel","animated":"demo:entity/animated_panel"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#skin"},"down":{"texture":"#animated"}}}]}`),
+		"assets/minecraft/textures/block/stone.png.mcmeta": []byte(`{"animation":{"frames":[{"index":1,"time":3},0,1]}}`),
 		"assets/minecraft/textures/block/stone.png": fixturePNG(t, 16, 32, func(x, y int) color.NRGBA {
+			if y >= 16 {
+				return color.NRGBA{G: 255, A: 255}
+			}
+			return color.NRGBA{R: 255, A: 255}
+		}),
+		"assets/minecraft/textures/blocks/sequence.png.mcmeta": []byte(`{"animation":{"frametime":4}}`),
+		"assets/minecraft/textures/blocks/sequence.png": fixturePNG(t, 8, 24, func(x, y int) color.NRGBA {
+			return []color.NRGBA{{R: 255, A: 255}, {G: 255, A: 255}, {B: 255, A: 255}}[y/8]
+		}),
+		"assets/demo/textures/entity/animated_panel.png.mcmeta": []byte(`{"animation":{"width":48,"height":16,"frametime":5,"frames":[1,0]}}`),
+		"assets/demo/textures/entity/animated_panel.png": fixturePNG(t, 48, 32, func(x, y int) color.NRGBA {
 			if y >= 16 {
 				return color.NRGBA{G: 255, A: 255}
 			}
@@ -160,6 +171,56 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if pixel != (color.NRGBA{G: 255, A: 255}) {
 		t.Fatalf("selected wrong animation frame: %v", pixel)
 	}
+	for _, test := range []struct {
+		name      string
+		width     int
+		frameTime int
+		colors    []color.NRGBA
+	}{
+		{
+			name:      "stone",
+			width:     16,
+			frameTime: 1,
+			colors:    []color.NRGBA{{G: 255, A: 255}, {R: 255, A: 255}, {G: 255, A: 255}},
+		},
+		{
+			name:      "sequence",
+			width:     16,
+			frameTime: 4,
+			colors:    []color.NRGBA{{R: 255, A: 255}, {G: 255, A: 255}, {B: 255, A: 255}},
+		},
+		{
+			name:   "demo:entity/animated_panel",
+			width:  48,
+			colors: []color.NRGBA{{G: 255, A: 255}},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			texture := atlas.Textures[test.name]
+			if texture.Frames != len(test.colors) || texture.FrameTime != test.frameTime {
+				t.Fatalf("animation metadata = %+v", texture)
+			}
+			if texture.SU*float64(atlas.Width) != float64(test.width) || texture.SV*float64(atlas.Height) != float64(16*len(test.colors)) {
+				t.Fatalf("wrong strip dimensions: %+v", texture)
+			}
+			x0, y0 := int(texture.U*float64(atlas.Width)), int(texture.V*float64(atlas.Height))
+			for i, want := range test.colors {
+				for y := 0; y < 16; y++ {
+					for x := 0; x < test.width; x++ {
+						got := color.NRGBAModel.Convert(img.At(x0+x, y0+i*16+y)).(color.NRGBA)
+						if got != want {
+							t.Fatalf("frame %d pixel (%d,%d) = %v, want %v", i, x, y, got, want)
+						}
+					}
+				}
+			}
+		})
+	}
+	for _, name := range []string{"unknown", "demo:entity/panel"} {
+		if texture := atlas.Textures[name]; texture.Frames != 1 || texture.FrameTime != 0 {
+			t.Fatalf("static texture %s metadata = %+v", name, texture)
+		}
+	}
 	if _, ok := atlas.Textures["entity/chest/normal_left"]; !ok {
 		t.Fatal("double chest entity texture was dropped")
 	}
@@ -192,6 +253,12 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	}
 	if _, ok := parsed.Model("demo:block/panel"); !ok {
 		t.Fatal("parser lost the non-vanilla model namespace")
+	}
+	if texture, ok := parsed.Texture("minecraft:block/stone"); !ok || texture.Frames != 3 || texture.FrameTime != 1 {
+		t.Fatalf("exported animation metadata lost: %+v", texture)
+	}
+	if rect, ok := parsed.TextureRect("minecraft:block/stone"); !ok || rect.Dx() != 16 || rect.Dy() != 48 {
+		t.Fatalf("parser did not return the whole animation strip: %v", rect)
 	}
 	rect, ok := parsed.TextureRect("demo:entity/panel")
 	if !ok || rect.Dx() != 48 || rect.Dy() != 32 || !rect.In(parsed.AtlasImage.Bounds()) {

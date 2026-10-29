@@ -28,8 +28,9 @@ type Options struct {
 	TileSize  int
 }
 type textureImage struct {
-	id    asset.ID
-	image *image.NRGBA
+	image     *image.NRGBA
+	frames    int
+	frameTime int
 }
 
 func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
@@ -96,16 +97,32 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 		if err != nil {
 			return nil, fmt.Errorf("texture %s: %w", id, err)
 		}
+		isBlock := strings.HasPrefix(id.Path(), "block/") || strings.HasPrefix(id.Path(), "blocks/")
 		width, height := opt.TileSize, opt.TileSize
-		if !strings.HasPrefix(id.Path(), "block/") && !strings.HasPrefix(id.Path(), "blocks/") {
+		if !isBlock {
 			width = frame.Dx()
 			height = frame.Dy()
+		}
+		texture := textureImage{frames: 1}
+		if isBlock && metadata.Animation != nil {
+			texture.image, texture.frames, err = renderAnimation(img, metadata.Animation, opt.TileSize)
+			if err != nil {
+				return nil, fmt.Errorf("texture %s: %w", id, err)
+			}
+			// 逐帧时长未支持；统一使用默认帧时，省略时为 1 tick。
+			texture.frameTime = metadata.Animation.FrameTime
+			if texture.frameTime == 0 {
+				texture.frameTime = 1
+			}
+			height = texture.image.Bounds().Dy()
+		} else {
+			texture.image = renderTexture(img, frame, width, height)
 		}
 		name := id.TextureName()
 		if _, exists := images[name]; exists {
 			return nil, fmt.Errorf("atlas key collision at %s", name)
 		}
-		images[name] = textureImage{id: id, image: renderTexture(img, frame, width, height)}
+		images[name] = texture
 		paddedWidth := (width + opt.TileSize - 1) / opt.TileSize * opt.TileSize
 		paddedHeight := (height + opt.TileSize - 1) / opt.TileSize * opt.TileSize
 		rectangles = append(rectangles, rectangle{name: name, width: paddedWidth, height: paddedHeight})
@@ -117,10 +134,19 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 	atlas := asset.Atlas{Textures: map[string]asset.AtlasTexture{}, Width: size, Height: size, TileSize: opt.TileSize, SUSV: float64(opt.TileSize) / float64(size)}
 	canvas := image.NewNRGBA(image.Rect(0, 0, size, size))
 	for _, rect := range packed {
-		texture := images[rect.name].image
-		target := image.Rectangle{Min: rect.position, Max: rect.position.Add(texture.Bounds().Size())}
-		draw.Draw(canvas, target, texture, texture.Bounds().Min, draw.Src)
-		atlas.Textures[rect.name] = asset.AtlasTexture{U: float64(target.Min.X) / float64(size), V: float64(target.Min.Y) / float64(size), SU: float64(target.Dx()) / float64(size), SV: float64(target.Dy()) / float64(size), TileIndex: target.Min.Y/opt.TileSize*(size/opt.TileSize) + target.Min.X/opt.TileSize}
+		texture := images[rect.name]
+		target := image.Rectangle{Min: rect.position, Max: rect.position.Add(texture.image.Bounds().Size())}
+		draw.Draw(canvas, target, texture.image, texture.image.Bounds().Min, draw.Src)
+		// 坐标覆盖整条动画，下游按帧数纵向切分。
+		atlas.Textures[rect.name] = asset.AtlasTexture{
+			U:         float64(target.Min.X) / float64(size),
+			V:         float64(target.Min.Y) / float64(size),
+			SU:        float64(target.Dx()) / float64(size),
+			SV:        float64(target.Dy()) / float64(size),
+			TileIndex: target.Min.Y/opt.TileSize*(size/opt.TileSize) + target.Min.X/opt.TileSize,
+			Frames:    texture.frames,
+			FrameTime: texture.frameTime,
+		}
 	}
 	if err := os.MkdirAll(opt.OutputDir, 0755); err != nil {
 		return nil, err

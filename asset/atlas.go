@@ -43,6 +43,8 @@ type AtlasTexture struct {
 	SU        float64 `json:"su"`
 	SV        float64 `json:"sv"`
 	TileIndex int     `json:"tileIndex"`
+	Frames    int     `json:"frames"`
+	FrameTime int     `json:"frameTime"`
 }
 
 type Atlas struct {
