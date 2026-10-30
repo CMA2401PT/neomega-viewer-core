@@ -52,6 +52,16 @@ go run ./parse/cli -dir dist/final \
 
 示例读取全部表格和 PNG，再输出数量、指定方块的模型选择与渲染需求、模型定义和纹理像素范围。在 Go 应用中使用 `parse.Load`，或者只读取需要的单张表。示例代码和完整用法见 [parse/README.md](parse/README.md)。
 
+## 方块实心表
+
+除了渲染资源，这里还分发一份方块实心表：每个 Java 状态六个 bit，对应 west/east/down/up/north/south 六个面是否被
+不透明矩形完整覆盖。neomega-converter 修复栅栏连接这类状态时，靠它判断邻居的某一面是不是实心墙。
+
+实心表要从方块几何算出来，所以由 neomega-viewer 的几何生成器产出，写到 `solidtable/geometry.nvsolid`。本仓库
+只负责保存和分发：`solidtable.Bundled()` 返回内嵌的表，多个调用方共享同一份解码结果；`Table.Encode` 和 `Decode`
+读写 NVST v1 格式。NVST v1 使用小端布局：4 字节 magic `NVST`、uint32 版本、uint32 条目数，随后是按 hash 排序的
+N 条 `(uint32 javaHash, uint8 solid)`，每条 5 字节。位域 bit0…bit5 依次对应上面六个面。
+
 ## 为什么分成五步
 
 加载失败时，首先需要判断问题出在原始资源、模型关系、特殊渲染，还是图集坐标。五步分别处理这些边界，让问题可以在进入下一步之前被发现：
