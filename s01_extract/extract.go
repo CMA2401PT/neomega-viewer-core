@@ -15,6 +15,7 @@ import (
 
 	"neomega-assets/asset"
 	"neomega-assets/utils/jsonfile"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 type Options struct {
@@ -24,7 +25,7 @@ type Options struct {
 
 // Classify selects blockstates, models, PNGs and their metadata, preserving
 // nested directories and namespaces. Class files and unrelated JAR data stay out.
-func Classify(name string) (category string, id asset.ID, ok bool) {
+func Classify(name string) (category string, id jmodel.ResourceID, ok bool) {
 	if path.Clean(name) != name || strings.Contains(name, "\\") {
 		return "", "", false
 	}
@@ -52,7 +53,7 @@ func Classify(name string) (category string, id asset.ID, ok bool) {
 	default:
 		return "", "", false
 	}
-	id, err := asset.ParseID(parts[1] + ":" + resource)
+	id, err := jmodel.ParseResourceID(parts[1] + ":" + resource)
 	return category, id, err == nil
 }
 

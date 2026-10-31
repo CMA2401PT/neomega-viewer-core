@@ -13,9 +13,8 @@ import (
 	"strings"
 
 	"neomega-assets/asset"
-	"neomega-assets/parse"
-	"neomega-assets/s03_models"
 	"neomega-assets/utils/jsonfile"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 type Options struct {
@@ -28,50 +27,36 @@ type Options struct {
 }
 
 type Report struct {
-	Baseline                      string     `json:"baseline"`
-	Current                       string     `json:"current"`
-	Version                       string     `json:"version"`
-	BaselineTextures              int        `json:"baselineTextures"`
-	CurrentTextures               int        `json:"currentTextures"`
-	SharedTextures                int        `json:"sharedTextures"`
-	BaselineOnly                  []string   `json:"baselineOnly"`
-	CurrentOnly                   []string   `json:"currentOnly"`
-	BaselineOnlyStillInJAR        []string   `json:"baselineOnlyStillInJAR"`
-	BeforeMissingBaselineTextures []string   `json:"beforeMissingBaselineTextures"`
-	CurrentJARBlockPNGs           int        `json:"currentJARBlockPNGs"`
-	MissingCurrentBlockPNGs       []asset.ID `json:"missingCurrentBlockPNGs"`
-	MissingRequiredTextures       []asset.ID `json:"missingRequiredTextures"`
-	BeforeMissingGeometry         []asset.ID `json:"beforeMissingGeometry"`
-	AfterMissingGeometry          []asset.ID `json:"afterMissingGeometry"`
-	CurrentPNGSize                [2]int     `json:"currentPNGSize"`
-	BoundsChecked                 bool       `json:"boundsChecked"`
+	Baseline                      string              `json:"baseline"`
+	Current                       string              `json:"current"`
+	Version                       string              `json:"version"`
+	BaselineTextures              int                 `json:"baselineTextures"`
+	CurrentTextures               int                 `json:"currentTextures"`
+	SharedTextures                int                 `json:"sharedTextures"`
+	BaselineOnly                  []string            `json:"baselineOnly"`
+	CurrentOnly                   []string            `json:"currentOnly"`
+	BaselineOnlyStillInJAR        []string            `json:"baselineOnlyStillInJAR"`
+	BeforeMissingBaselineTextures []string            `json:"beforeMissingBaselineTextures"`
+	CurrentJARBlockPNGs           int                 `json:"currentJARBlockPNGs"`
+	MissingCurrentBlockPNGs       []jmodel.ResourceID `json:"missingCurrentBlockPNGs"`
+	MissingRequiredTextures       []jmodel.ResourceID `json:"missingRequiredTextures"`
+	BeforeMissingGeometry         []jmodel.ResourceID `json:"beforeMissingGeometry"`
+	AfterMissingGeometry          []jmodel.ResourceID `json:"afterMissingGeometry"`
+	CurrentPNGSize                [2]int              `json:"currentPNGSize"`
+	BoundsChecked                 bool                `json:"boundsChecked"`
 }
 
-func geometry(blockstates asset.BlockStates, table asset.Models) (map[asset.ID]bool, error) {
-	models := map[asset.ID]asset.Model{}
-	for name, model := range table {
-		id, err := asset.ParseID(name)
-		if err != nil {
-			return nil, err
-		}
-		if model.Parent != "" {
-			model.Parent, err = asset.ParseID(string(model.Parent))
-			if err != nil {
-				return nil, err
-			}
-		}
-		models[id] = model
-	}
-	resolver := s03_models.NewResolver(models)
-	visible := map[asset.ID]bool{}
+func geometry(blockstates jmodel.RuleTable, table jmodel.Models) (map[jmodel.ResourceID]bool, error) {
+	resolver := jmodel.NewResolver(table)
+	visible := map[jmodel.ResourceID]bool{}
 	for name, state := range blockstates {
-		id, err := asset.ParseID(name)
+		id, err := jmodel.ParseResourceID(string(name))
 		if err != nil {
 			return nil, err
 		}
 		visible[id] = false
 		for _, application := range state.Applications() {
-			modelID, err := asset.ParseID(string(application.Model))
+			modelID, err := jmodel.ParseResourceID(string(application.Model))
 			if err != nil {
 				return nil, err
 			}
@@ -94,7 +79,7 @@ func Run(opt Options) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	current, err := parse.ReadAtlas(filepath.Join(opt.CurrentDir, "blocksAtlases.json"))
+	current, err := jmodel.ReadAtlas(filepath.Join(opt.CurrentDir, "blocksAtlases.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -115,13 +100,13 @@ func Run(opt Options) (*Report, error) {
 	jarTextures := map[string]bool{}
 	rawSelected := map[string]bool{}
 	for id := range snapshot.Textures {
-		jarTextures[id.TextureName()] = true
+		jarTextures[string(id)] = true
 		if strings.HasPrefix(id.Path(), "block/") || strings.HasPrefix(id.Path(), "blocks/") {
-			rawSelected[id.TextureName()] = true
+			rawSelected[string(id)] = true
 		}
 	}
 	for _, id := range rawIndex.RequiredTextures {
-		rawSelected[id.TextureName()] = true
+		rawSelected[string(id)] = true
 	}
 	report := &Report{
 		Baseline:                      opt.BaselineDir,
@@ -133,39 +118,39 @@ func Run(opt Options) (*Report, error) {
 		CurrentOnly:                   []string{},
 		BaselineOnlyStillInJAR:        []string{},
 		BeforeMissingBaselineTextures: []string{},
-		MissingCurrentBlockPNGs:       []asset.ID{},
-		MissingRequiredTextures:       []asset.ID{},
-		BeforeMissingGeometry:         []asset.ID{},
-		AfterMissingGeometry:          []asset.ID{},
+		MissingCurrentBlockPNGs:       []jmodel.ResourceID{},
+		MissingRequiredTextures:       []jmodel.ResourceID{},
+		BeforeMissingGeometry:         []jmodel.ResourceID{},
+		AfterMissingGeometry:          []jmodel.ResourceID{},
 	}
 	for name := range baseline.Textures {
-		if jarTextures[name] && !rawSelected[name] {
-			report.BeforeMissingBaselineTextures = append(report.BeforeMissingBaselineTextures, name)
+		if jarTextures[string(name)] && !rawSelected[string(name)] {
+			report.BeforeMissingBaselineTextures = append(report.BeforeMissingBaselineTextures, string(name))
 		}
 		if _, ok := current.Textures[name]; ok {
 			report.SharedTextures++
 			continue
 		}
-		report.BaselineOnly = append(report.BaselineOnly, name)
-		if jarTextures[name] {
-			report.BaselineOnlyStillInJAR = append(report.BaselineOnlyStillInJAR, name)
+		report.BaselineOnly = append(report.BaselineOnly, string(name))
+		if jarTextures[string(name)] {
+			report.BaselineOnlyStillInJAR = append(report.BaselineOnlyStillInJAR, string(name))
 		}
 	}
 	for name := range current.Textures {
 		if _, ok := baseline.Textures[name]; !ok {
-			report.CurrentOnly = append(report.CurrentOnly, name)
+			report.CurrentOnly = append(report.CurrentOnly, string(name))
 		}
 	}
 	for id := range snapshot.Textures {
 		if strings.HasPrefix(id.Path(), "block/") || strings.HasPrefix(id.Path(), "blocks/") {
 			report.CurrentJARBlockPNGs++
-			if _, ok := current.Textures[id.TextureName()]; !ok {
+			if _, ok := current.Textures[id]; !ok {
 				report.MissingCurrentBlockPNGs = append(report.MissingCurrentBlockPNGs, id)
 			}
 		}
 	}
 	for _, id := range required.RequiredTextures {
-		if _, ok := current.Textures[id.TextureName()]; !ok {
+		if _, ok := current.Textures[id]; !ok {
 			report.MissingRequiredTextures = append(report.MissingRequiredTextures, id)
 		}
 	}
@@ -227,7 +212,7 @@ func Run(opt Options) (*Report, error) {
 		width := int(math.Round(su * float64(config.Width)))
 		height := int(math.Round(sv * float64(config.Height)))
 		if width <= 0 || height <= 0 || !image.Rect(x, y, x+width, y+height).In(bounds) {
-			return nil, fmt.Errorf("invalid atlas coordinates for %s", name)
+			return nil, fmt.Errorf("invalid atlas coordinates for %s", string(name))
 		}
 	}
 	report.BoundsChecked = true
@@ -245,38 +230,52 @@ func Run(opt Options) (*Report, error) {
 	return report, nil
 }
 
-func readTables(dir string) (asset.BlockStates, asset.Models, error) {
-	states, err := parse.ReadBlockStates(filepath.Join(dir, "blockstates.json"))
+func readTables(dir string) (jmodel.RuleTable, jmodel.Models, error) {
+	states, err := jmodel.ReadRules(filepath.Join(dir, "blockstates.json"))
 	if err != nil {
 		return nil, nil, err
 	}
-	models, err := parse.ReadModels(filepath.Join(dir, "models.json"))
+	models, err := jmodel.ReadModels(filepath.Join(dir, "models.json"))
 	return states, models, err
 }
 
 // Only the comparison baseline may use the historical viewer format. New builds
-// and the public parse package always use the split, single-version format.
-func readBaseline(dir string) (asset.Atlas, asset.BlockStates, asset.Models, error) {
+// and the shared model reader use the split, single-version format with full IDs.
+func readBaseline(dir string) (jmodel.Atlas, jmodel.RuleTable, jmodel.Models, error) {
 	path := filepath.Join(dir, "blockStatesModels.json")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		atlas, err := parse.ReadAtlas(filepath.Join(dir, "blocksAtlases.json"))
+		atlas, err := jmodel.ReadAtlas(filepath.Join(dir, "blocksAtlases.json"))
 		if err != nil {
 			return atlas, nil, nil, err
 		}
 		states, models, err := readTables(dir)
 		return atlas, states, models, err
 	} else if err != nil {
-		return asset.Atlas{}, nil, nil, err
+		return jmodel.Atlas{}, nil, nil, err
 	}
 	tables, err := jsonfile.Read[struct {
-		BlockStates map[string]asset.BlockStates `json:"blockstates"`
-		Models      map[string]asset.Models      `json:"models"`
+		BlockStates map[string]jmodel.RuleTable `json:"blockstates"`
+		Models      map[string]jmodel.Models    `json:"models"`
 	}](path)
 	if err != nil {
-		return asset.Atlas{}, nil, nil, err
+		return jmodel.Atlas{}, nil, nil, err
 	}
 	atlas, err := jsonfile.Read[struct {
-		Latest asset.Atlas `json:"latest"`
+		Latest jmodel.Atlas `json:"latest"`
 	}](filepath.Join(dir, "blocksAtlases.json"))
-	return atlas.Latest, tables.BlockStates["latest"], tables.Models["latest"], err
+	if err != nil {
+		return jmodel.Atlas{}, nil, nil, err
+	}
+	// The historical mc-assets atlas stripped block/ (including nested block
+	// paths). Expand that archive convention here, outside the shared reader.
+	textures := make(map[jmodel.ResourceID]jmodel.AtlasTexture, len(atlas.Latest.Textures))
+	for id, entry := range atlas.Latest.Textures {
+		path := id.Path()
+		if !strings.HasPrefix(path, "entity/") {
+			id = jmodel.ResourceID(id.Namespace() + ":block/" + path)
+		}
+		textures[id] = entry
+	}
+	atlas.Latest.Textures = textures
+	return atlas.Latest, tables.BlockStates["latest"], tables.Models["latest"], nil
 }

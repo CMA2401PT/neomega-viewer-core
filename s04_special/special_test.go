@@ -10,14 +10,15 @@ import (
 	"neomega-assets/asset"
 	mcassets "neomega-assets/resources/third_party/mc-assets"
 	"neomega-assets/utils/jsonfile"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 func TestKnownNonModelRenderersAreExplicit(t *testing.T) {
-	cases := map[asset.ID]asset.RendererKind{
-		"minecraft:air":           asset.RendererInvisible,
-		"minecraft:water":         asset.RendererFluid,
-		"minecraft:bubble_column": asset.RendererFluid,
-		"minecraft:moving_piston": asset.RendererDynamic,
+	cases := map[jmodel.ResourceID]jmodel.RendererKind{
+		"minecraft:air":           jmodel.RendererInvisible,
+		"minecraft:water":         jmodel.RendererFluid,
+		"minecraft:bubble_column": jmodel.RendererFluid,
+		"minecraft:moving_piston": jmodel.RendererDynamic,
 	}
 	for id, want := range cases {
 		got, ok := classifyEmpty(id)
@@ -38,9 +39,9 @@ func TestUnrecognizedEmptyModelDoesNotPassAsComplete(t *testing.T) {
 	if err := jsonfile.Write(filepath.Join(input, "snapshot.json"), snapshot); err != nil {
 		t.Fatal(err)
 	}
-	index := asset.ModelIndex{Version: "fixture", GeometrylessBlockStates: []asset.ID{"demo:ghost"}}
+	index := asset.ModelIndex{Version: "fixture", GeometrylessBlockStates: []jmodel.ResourceID{"demo:ghost"}}
 	jsonfile.Write(filepath.Join(models, "model-index.json"), index)
-	blockstates := asset.BlockStates{"demo:ghost": {Variants: map[string]asset.Choice{"": {Options: []asset.Apply{{Model: "demo:block/ghost"}}}}}}
+	blockstates := jmodel.RuleTable{"demo:ghost": {Variants: map[string]jmodel.Choice{"": {Options: []jmodel.Apply{{Model: "demo:block/ghost"}}}}}}
 	jsonfile.Write(filepath.Join(models, "blockstates.json"), blockstates)
 	_, err := Run(context.Background(), Options{InputDir: input, ModelDir: models, OutputDir: filepath.Join(root, "completed")})
 	if err == nil || !strings.Contains(err.Error(), "demo:ghost") {
@@ -59,23 +60,23 @@ func TestColoredShulkerPreviewsUseTheirOwnSkins(t *testing.T) {
 		index:          index,
 		snapshot:       snapshot,
 		output:         output,
-		importing:      map[asset.ID]bool{},
-		neededTextures: map[asset.ID]bool{},
+		importing:      map[jmodel.ResourceID]bool{},
+		neededTextures: map[jmodel.ResourceID]bool{},
 	}
 	for _, color := range []string{"red", "blue"} {
-		skin := asset.ID("minecraft:entity/shulker/shulker_" + color)
+		skin := jmodel.ResourceID("minecraft:entity/shulker/shulker_" + color)
 		snapshot.Textures[skin] = asset.File{}
-		state, err := importer.state(asset.ID("minecraft:" + color + "_shulker_box"))
+		state, err := importer.state(jmodel.ResourceID("minecraft:" + color + "_shulker_box"))
 		if err != nil {
 			t.Fatal(err)
 		}
 		for _, application := range state.Applications() {
 			file := snapshot.Models[application.Model]
-			model, err := jsonfile.Read[asset.Model](filepath.Join(output, file.Path))
+			model, err := jsonfile.Read[jmodel.Model](filepath.Join(output, file.Path))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if model.Textures["0"].Sprite != asset.TextureRef(skin) {
+			if model.Textures["0"].Sprite != jmodel.TextureRef(skin) {
 				t.Fatalf("%s preview uses another color's skin", color)
 			}
 			if len(model.Extra["credit"]) == 0 {

@@ -12,17 +12,18 @@ import (
 	"neomega-assets/resources"
 	mcassets "neomega-assets/resources/third_party/mc-assets"
 	"neomega-assets/utils/jsonfile"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 type templateImporter struct {
 	index          mcassets.Index
 	snapshot       *asset.Snapshot
 	output         string
-	importing      map[asset.ID]bool
-	neededTextures map[asset.ID]bool
+	importing      map[jmodel.ResourceID]bool
+	neededTextures map[jmodel.ResourceID]bool
 }
 
-func (importer *templateImporter) modelReference(value asset.ID) (asset.ID, error) {
+func (importer *templateImporter) modelReference(value jmodel.ResourceID) (jmodel.ResourceID, error) {
 	id, err := resources.NormalizeModelReference(value)
 	if err != nil {
 		return "", err
@@ -37,7 +38,7 @@ func (importer *templateImporter) modelReference(value asset.ID) (asset.ID, erro
 	return id, nil
 }
 
-func (importer *templateImporter) saveModel(id asset.ID, model asset.Model, origin string) error {
+func (importer *templateImporter) saveModel(id jmodel.ResourceID, model jmodel.Model, origin string) error {
 	relative := "assets/" + id.Namespace() + "/models/" + id.Path() + ".json"
 	if err := jsonfile.Write(filepath.Join(importer.output, filepath.FromSlash(relative)), model); err != nil {
 		return err
@@ -46,7 +47,7 @@ func (importer *templateImporter) saveModel(id asset.ID, model asset.Model, orig
 	return nil
 }
 
-func (importer *templateImporter) importModel(source, target asset.ID) error {
+func (importer *templateImporter) importModel(source, target jmodel.ResourceID) error {
 	if _, ok := importer.snapshot.Models[target]; ok {
 		return nil
 	}
@@ -60,7 +61,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 	if err != nil {
 		return err
 	}
-	var model asset.Model
+	var model jmodel.Model
 	if err := json.Unmarshal(raw, &model); err != nil {
 		return err
 	}
@@ -77,7 +78,7 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 		}
 		model.Textures[key] = binding
 		if !strings.HasPrefix(string(binding.Sprite), "#") {
-			importer.neededTextures[asset.ID(binding.Sprite)] = true
+			importer.neededTextures[jmodel.ResourceID(binding.Sprite)] = true
 		}
 	}
 	if model.Elements != nil {
@@ -94,20 +95,20 @@ func (importer *templateImporter) importModel(source, target asset.ID) error {
 	return importer.saveModel(target, model, importer.index.ModelOrigin(path))
 }
 
-func (importer *templateImporter) state(block asset.ID) (asset.BlockState, error) {
+func (importer *templateImporter) state(block jmodel.ResourceID) (jmodel.ModelRules, error) {
 	path, ok := importer.index.States[block]
 	if !ok {
-		return asset.BlockState{}, fmt.Errorf("no special model template for %s", block)
+		return jmodel.ModelRules{}, fmt.Errorf("no special model template for %s", block)
 	}
 	raw, err := mcassets.Read(path)
 	if err != nil {
-		return asset.BlockState{}, err
+		return jmodel.ModelRules{}, err
 	}
-	var state asset.BlockState
+	var state jmodel.ModelRules
 	if err := json.Unmarshal(raw, &state); err != nil {
 		return state, err
 	}
-	rewrite := func(choice *asset.Choice) error {
+	rewrite := func(choice *jmodel.Choice) error {
 		for i := range choice.Options {
 			id, err := importer.modelReference(choice.Options[i].Model)
 			if err != nil {
@@ -138,12 +139,12 @@ func (importer *templateImporter) state(block asset.ID) (asset.BlockState, error
 }
 
 // modelVariant applies the resource rule without knowing which block requested it.
-func (importer *templateImporter) modelVariant(variant resources.TemplateVariant, state asset.BlockState) (asset.BlockState, error) {
+func (importer *templateImporter) modelVariant(variant resources.TemplateVariant, state jmodel.ModelRules) (jmodel.ModelRules, error) {
 	file, ok := importer.snapshot.Models[variant.Source]
 	if !ok {
 		return state, fmt.Errorf("missing preview source model %s", variant.Source)
 	}
-	model, err := jsonfile.Read[asset.Model](filepath.Join(importer.output, filepath.FromSlash(file.Path)))
+	model, err := jsonfile.Read[jmodel.Model](filepath.Join(importer.output, filepath.FromSlash(file.Path)))
 	if err != nil {
 		return state, err
 	}
@@ -151,7 +152,7 @@ func (importer *templateImporter) modelVariant(variant resources.TemplateVariant
 		if _, ok := importer.snapshot.Textures[texture]; !ok {
 			return state, fmt.Errorf("missing preview texture %s", texture)
 		}
-		model.Textures[slot] = asset.TextureBinding{Sprite: asset.TextureRef(texture)}
+		model.Textures[slot] = jmodel.TextureBinding{Sprite: jmodel.TextureRef(texture)}
 	}
 	if variant.ClearTint && model.Elements != nil {
 		for i := range *model.Elements {
@@ -164,7 +165,7 @@ func (importer *templateImporter) modelVariant(variant resources.TemplateVariant
 	if err := importer.saveModel(variant.Target, model, file.Origin+variant.OriginNote); err != nil {
 		return state, err
 	}
-	replace := func(choice *asset.Choice) {
+	replace := func(choice *jmodel.Choice) {
 		for i := range choice.Options {
 			if choice.Options[i].Model == variant.Source {
 				choice.Options[i].Model = variant.Target

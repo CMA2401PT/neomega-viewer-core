@@ -10,19 +10,20 @@ import (
 
 	"neomega-assets/asset"
 	"neomega-assets/utils/jsonfile"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 // These two small diagnostic textures are generated here, not copied from a JAR.
 func addPlaceholders(snapshot *asset.Snapshot, output string) error {
 	for _, name := range []string{"unknown", "errored"} {
-		block := asset.ID("minecraft:" + name)
-		model := asset.ID("minecraft:block/" + name)
+		block := jmodel.ResourceID("minecraft:" + name)
+		model := jmodel.ResourceID("minecraft:block/" + name)
 		texture := model
 		statePath := "assets/minecraft/blockstates/" + name + ".json"
 		modelPath := "assets/minecraft/models/block/" + name + ".json"
 		texturePath := "assets/minecraft/textures/block/" + name + ".png"
-		state := asset.BlockState{Variants: map[string]asset.Choice{"": {Options: []asset.Apply{{Model: model}}}}}
-		data := asset.Model{Parent: "minecraft:block/cube_all", Textures: map[string]asset.TextureBinding{"all": {Sprite: asset.TextureRef(texture)}}}
+		state := jmodel.ModelRules{Variants: map[string]jmodel.Choice{"": {Options: []jmodel.Apply{{Model: model}}}}}
+		data := jmodel.Model{Parent: "minecraft:block/cube_all", Textures: map[string]jmodel.TextureBinding{"all": {Sprite: jmodel.TextureRef(texture)}}}
 		if err := jsonfile.Write(filepath.Join(output, statePath), state); err != nil {
 			return err
 		}

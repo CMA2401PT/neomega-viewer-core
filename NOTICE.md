@@ -14,7 +14,7 @@
 | 上游位置 | 对应职责 |
 |---|---|
 | `src/datapaths-builder.ts` | `s01_extract` 的资源类别、目录与索引概念 |
-| `src/newAssetsBuilder.ts`、`src/consumer/types.ts` | `asset`、`s03_models` 的模型结构和导出约定 |
+| `src/newAssetsBuilder.ts`、`src/consumer/types.ts` | blocks 的 `geometry/java_block_model` 模型结构与本工具 `s03_models` 的导出约定 |
 | `custom/blockentities/1.13`、`1.20`、`latest` 及 `custom/textures` | `s04_special` 使用的社区静态预览素材 |
 | `src/genBlocks.ts`、`src/consumer/atlasCreator.ts` | `s05_atlas` 的产物名称、纹理类别与 UV 字段约定 |
 

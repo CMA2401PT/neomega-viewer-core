@@ -5,18 +5,18 @@ import (
 	"slices"
 	"strings"
 
-	"neomega-assets/asset"
 	"neomega-assets/resources"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
-func classifyEmpty(id asset.ID) (asset.BlockRenderer, bool) {
+func classifyEmpty(id jmodel.ResourceID) (jmodel.BlockRenderer, bool) {
 	if id == "minecraft:air" {
-		return asset.BlockRenderer{Kind: asset.RendererInvisible}, true
+		return jmodel.BlockRenderer{Kind: jmodel.RendererInvisible}, true
 	}
 	return resources.NonModelRenderer(id)
 }
 
-func stateProperties(state asset.BlockState) []string {
+func stateProperties(state jmodel.ModelRules) []string {
 	keys := map[string]bool{}
 	for variant := range state.Variants {
 		for _, pair := range strings.Split(variant, ",") {
@@ -25,8 +25,8 @@ func stateProperties(state asset.BlockState) []string {
 			}
 		}
 	}
-	var visit func(*asset.Condition)
-	visit = func(condition *asset.Condition) {
+	var visit func(*jmodel.Condition)
+	visit = func(condition *jmodel.Condition) {
 		if condition == nil {
 			return
 		}

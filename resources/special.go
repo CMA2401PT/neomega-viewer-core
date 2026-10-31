@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"neomega-assets/asset"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 // JavaTargetVersion is aligned with neomega-blocks' existing conversion preset.
@@ -14,25 +15,25 @@ const JavaTargetVersion = "1.21.4"
 
 // NonModelRenderer identifies supported vanilla blocks without static geometry.
 // The pipeline itself handles minecraft:air.
-func NonModelRenderer(id asset.ID) (asset.BlockRenderer, bool) {
+func NonModelRenderer(id jmodel.ResourceID) (jmodel.BlockRenderer, bool) {
 	if id.Namespace() != "minecraft" {
-		return asset.BlockRenderer{}, false
+		return jmodel.BlockRenderer{}, false
 	}
 	switch id.Path() {
 	case "cave_air", "void_air", "barrier", "light", "structure_void":
-		return asset.BlockRenderer{Kind: asset.RendererInvisible}, true
+		return jmodel.BlockRenderer{Kind: jmodel.RendererInvisible}, true
 	case "water", "lava", "bubble_column":
-		return asset.BlockRenderer{Kind: asset.RendererFluid, Family: strings.TrimSuffix(id.Path(), "_column"), DynamicFields: []string{"fluidLevel", "neighborFluidStates"}}, true
+		return jmodel.BlockRenderer{Kind: jmodel.RendererFluid, Family: strings.TrimSuffix(id.Path(), "_column"), DynamicFields: []string{"fluidLevel", "neighborFluidStates"}}, true
 	case "moving_piston":
-		return asset.BlockRenderer{Kind: asset.RendererDynamic, Family: "moving_piston", DynamicFields: []string{"movedBlockState", "progress"}}, true
+		return jmodel.BlockRenderer{Kind: jmodel.RendererDynamic, Family: "moving_piston", DynamicFields: []string{"movedBlockState", "progress"}}, true
 	}
-	return asset.BlockRenderer{}, false
+	return jmodel.BlockRenderer{}, false
 }
 
 // SpecialRenderer describes the runtime inputs beyond a community preview.
-func SpecialRenderer(id asset.ID) asset.BlockRenderer {
+func SpecialRenderer(id jmodel.ResourceID) jmodel.BlockRenderer {
 	name := id.Path()
-	profile := asset.BlockRenderer{Kind: asset.RendererSpecial, StaticPreview: true}
+	profile := jmodel.BlockRenderer{Kind: jmodel.RendererSpecial, StaticPreview: true}
 	switch {
 	case strings.HasSuffix(name, "_chest") || name == "chest":
 		profile.Family = "chest"
@@ -77,8 +78,8 @@ func SpecialRenderer(id asset.ID) asset.BlockRenderer {
 }
 
 // ModelRenderer adds runtime requirements to an existing static model.
-func ModelRenderer(id asset.ID) asset.BlockRenderer {
-	profile := asset.BlockRenderer{Kind: asset.RendererModel, StaticPreview: true}
+func ModelRenderer(id jmodel.ResourceID) jmodel.BlockRenderer {
+	profile := jmodel.BlockRenderer{Kind: jmodel.RendererModel, StaticPreview: true}
 	if strings.HasSuffix(id.Path(), "_sign") {
 		profile.Family = "sign"
 		profile.DynamicFields = []string{"frontText", "backText"}
@@ -87,7 +88,7 @@ func ModelRenderer(id asset.ID) asset.BlockRenderer {
 }
 
 // FamilyUsesTexture includes material used beyond the static preview.
-func FamilyUsesTexture(family string, id asset.ID) bool {
+func FamilyUsesTexture(family string, id jmodel.ResourceID) bool {
 	if id.Namespace() != "minecraft" {
 		return false
 	}
@@ -118,8 +119,8 @@ var familyPrefixes = map[string][]string{
 }
 
 // NormalizeModelReference adapts the short names in the bundled mc-assets models.
-func NormalizeModelReference(value asset.ID) (asset.ID, error) {
-	id, err := asset.ParseID(string(value))
+func NormalizeModelReference(value jmodel.ResourceID) (jmodel.ResourceID, error) {
+	id, err := jmodel.ParseResourceID(string(value))
 	if err != nil {
 		return "", err
 	}
@@ -127,56 +128,56 @@ func NormalizeModelReference(value asset.ID) (asset.ID, error) {
 	if !strings.HasPrefix(path, "block/") && !strings.HasPrefix(path, "item/") && !strings.HasPrefix(path, "builtin/") {
 		path = "block/" + path
 	}
-	return asset.ID(id.Namespace() + ":" + path), nil
+	return jmodel.ResourceID(id.Namespace() + ":" + path), nil
 }
 
 // NormalizeTextureReference adapts legacy texture paths to current resources.
-func NormalizeTextureReference(value asset.TextureRef, available map[asset.ID]asset.File) (asset.TextureRef, error) {
+func NormalizeTextureReference(value jmodel.TextureRef, available map[jmodel.ResourceID]asset.File) (jmodel.TextureRef, error) {
 	if strings.HasPrefix(string(value), "#") {
 		return value, nil
 	}
-	id, err := asset.ParseID(string(value))
+	id, err := jmodel.ParseResourceID(string(value))
 	if err != nil {
 		return "", err
 	}
 	// Keep a version's real path, including explicit overrides, when it exists.
 	if _, ok := available[id]; ok {
-		return asset.TextureRef(id), nil
+		return jmodel.TextureRef(id), nil
 	}
 	// This entity texture moved in modern client resources.
 	if id == "minecraft:entity/banner_base" {
 		id = "minecraft:entity/banner/banner_base"
 	}
-	return asset.TextureRef(id), nil
+	return jmodel.TextureRef(id), nil
 }
 
 // ImportedModelID keeps bundled models separate from native client models.
-func ImportedModelID(id asset.ID) asset.ID {
-	return asset.ID("neomega:" + id.Path())
+func ImportedModelID(id jmodel.ResourceID) jmodel.ResourceID {
+	return jmodel.ResourceID("neomega:" + id.Path())
 }
 
 // TemplateVariant describes a model derived from an imported template.
 // The importing stage handles file I/O and applies these declared replacements.
 type TemplateVariant struct {
-	Source     asset.ID
-	Target     asset.ID
-	Textures   map[string]asset.ID
+	Source     jmodel.ResourceID
+	Target     jmodel.ResourceID
+	Textures   map[string]jmodel.ResourceID
 	ClearTint  bool
 	OriginNote string
 }
 
 // TemplateVariantFor chooses a colored shulker's actual skin. Clearing tint
 // prevents the already colored texture from receiving a second color multiply.
-func TemplateVariantFor(block asset.ID) (TemplateVariant, bool) {
+func TemplateVariantFor(block jmodel.ResourceID) (TemplateVariant, bool) {
 	if !strings.HasSuffix(block.Path(), "_shulker_box") {
 		return TemplateVariant{}, false
 	}
 	color := strings.TrimSuffix(block.Path(), "_shulker_box")
 	return TemplateVariant{
 		Source: ImportedModelID("minecraft:block/entity/dyed_shulker_box"),
-		Target: asset.ID("neomega:block/preview/" + block.Path()),
-		Textures: map[string]asset.ID{
-			"0": asset.ID("minecraft:entity/shulker/shulker_" + color),
+		Target: jmodel.ResourceID("neomega:block/preview/" + block.Path()),
+		Textures: map[string]jmodel.ResourceID{
+			"0": jmodel.ResourceID("minecraft:entity/shulker/shulker_" + color),
 		},
 		ClearTint:  true,
 		OriginNote: " (selected " + color + " skin)",

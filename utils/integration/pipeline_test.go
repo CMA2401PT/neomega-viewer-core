@@ -15,13 +15,13 @@ import (
 	"testing"
 
 	"neomega-assets/asset"
-	"neomega-assets/parse"
 	"neomega-assets/s01_extract"
 	"neomega-assets/s02_patch"
 	"neomega-assets/s03_models"
 	"neomega-assets/s04_special"
 	"neomega-assets/s05_atlas"
 	"neomega-assets/utils/inventory"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 func fixturePNG(t *testing.T, width, height int, paint func(int, int) color.NRGBA) []byte {
@@ -146,7 +146,7 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if plan := plans.Blocks["minecraft:chest"]; plan.Kind != asset.RendererSpecial || !plan.StaticPreview || len(plan.DynamicFields) == 0 {
+	if plan := plans.Blocks["minecraft:chest"]; plan.Kind != jmodel.RendererSpecial || !plan.StaticPreview || len(plan.DynamicFields) == 0 {
 		t.Fatalf("chest render contract missing: %+v", plan)
 	}
 	completedReport := readJSON[asset.ModelIndex](t, filepath.Join(completed, "model-index.json"))
@@ -166,7 +166,7 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stone := atlas.Textures["stone"]
+	stone := atlas.Textures["minecraft:block/stone"]
 	pixel := color.NRGBAModel.Convert(img.At(int(stone.U*float64(atlas.Width)), int(stone.V*float64(atlas.Height)))).(color.NRGBA)
 	if pixel != (color.NRGBA{G: 255, A: 255}) {
 		t.Fatalf("selected wrong animation frame: %v", pixel)
@@ -178,13 +178,13 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		colors    []color.NRGBA
 	}{
 		{
-			name:      "stone",
+			name:      "minecraft:block/stone",
 			width:     16,
 			frameTime: 1,
 			colors:    []color.NRGBA{{G: 255, A: 255}, {R: 255, A: 255}, {G: 255, A: 255}},
 		},
 		{
-			name:      "sequence",
+			name:      "minecraft:blocks/sequence",
 			width:     16,
 			frameTime: 4,
 			colors:    []color.NRGBA{{R: 255, A: 255}, {G: 255, A: 255}, {B: 255, A: 255}},
@@ -196,7 +196,7 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			texture := atlas.Textures[test.name]
+			texture := atlas.Textures[jmodel.ResourceID(test.name)]
 			if texture.Frames != len(test.colors) || texture.FrameTime != test.frameTime {
 				t.Fatalf("animation metadata = %+v", texture)
 			}
@@ -216,12 +216,12 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 			}
 		})
 	}
-	for _, name := range []string{"unknown", "demo:entity/panel"} {
-		if texture := atlas.Textures[name]; texture.Frames != 1 || texture.FrameTime != 0 {
+	for _, name := range []string{"minecraft:block/unknown", "demo:entity/panel"} {
+		if texture := atlas.Textures[jmodel.ResourceID(name)]; texture.Frames != 1 || texture.FrameTime != 0 {
 			t.Fatalf("static texture %s metadata = %+v", name, texture)
 		}
 	}
-	if _, ok := atlas.Textures["entity/chest/normal_left"]; !ok {
+	if _, ok := atlas.Textures["minecraft:entity/chest/normal_left"]; !ok {
 		t.Fatal("double chest entity texture was dropped")
 	}
 	if _, err := os.Stat(filepath.Join(output, "blockRenderers.json")); err != nil {
@@ -244,23 +244,23 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		}
 		occupied = append(occupied, rect)
 	}
-	parsed, err := parse.Load(output)
+	parsed, err := jmodel.Load(output)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := parsed.BlockState("minecraft:stone"); !ok {
+	if _, ok := parsed.Rules["minecraft:stone"]; !ok {
 		t.Fatal("parser could not look up a canonical vanilla block ID")
 	}
-	if _, ok := parsed.Model("demo:block/panel"); !ok {
+	if _, ok := parsed.Models["demo:block/panel"]; !ok {
 		t.Fatal("parser lost the non-vanilla model namespace")
 	}
-	if texture, ok := parsed.Texture("minecraft:block/stone"); !ok || texture.Frames != 3 || texture.FrameTime != 1 {
+	if texture, ok := parsed.Atlas.Textures["minecraft:block/stone"]; !ok || texture.Frames != 3 || texture.FrameTime != 1 {
 		t.Fatalf("exported animation metadata lost: %+v", texture)
 	}
-	if rect, ok := parsed.TextureRect("minecraft:block/stone"); !ok || rect.Dx() != 16 || rect.Dy() != 48 {
+	if rect, ok := parsed.Atlas.PixelRect("minecraft:block/stone"); !ok || rect.Dx() != 16 || rect.Dy() != 48 {
 		t.Fatalf("parser did not return the whole animation strip: %v", rect)
 	}
-	rect, ok := parsed.TextureRect("demo:entity/panel")
+	rect, ok := parsed.Atlas.PixelRect("demo:entity/panel")
 	if !ok || rect.Dx() != 48 || rect.Dy() != 32 || !rect.In(parsed.AtlasImage.Bounds()) {
 		t.Fatalf("parser returned the wrong entity pixel rectangle: %v", rect)
 	}
@@ -273,11 +273,11 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(output, "blockStatesModels.json")); !os.IsNotExist(err) {
 		t.Fatal("legacy combined output still exists")
 	}
-	base := parsed.Models["block/cube_all"]
+	base := parsed.Models["minecraft:block/cube_all"]
 	if (*base.Elements)[0].ShadeDirectionOverride != "north" {
 		t.Fatal("modern shading direction lost")
 	}
-	model := parsed.Models["block/stone"]
+	model := parsed.Models["minecraft:block/stone"]
 	binding := model.Textures["all"]
 	if !binding.Object || binding.ForceTranslucent == nil || !*binding.ForceTranslucent {
 		t.Fatal("modern texture material information lost")
@@ -285,11 +285,11 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	if _, ok := model.Extra["texture_size"]; !ok {
 		t.Fatal("unknown model extension lost")
 	}
-	choice := parsed.BlockStates["stone"].Variants[""]
+	choice := parsed.Rules["minecraft:stone"].Variants[""]
 	if !choice.Array || len(choice.Options) != 2 || *choice.Options[0].Weight != 2 {
 		t.Fatal("weighted alternatives lost")
 	}
-	if parsed.BlockStates["demo:panel"].Multipart[0].When.OR[1].AND[1].Properties["lit"] != "true" {
+	if parsed.Rules["demo:panel"].Multipart[0].When.OR[1].AND[1].Properties["lit"] != "true" {
 		t.Fatal("nested multipart condition lost")
 	}
 	if _, err := os.Stat(filepath.Join(output, "THIRD_PARTY_NOTICES.txt")); err != nil {
@@ -332,8 +332,8 @@ func TestOverlayIsExplicitAndLeavesExtractedAssetsIntact(t *testing.T) {
 	if _, err := s02_patch.Run(context.Background(), s02_patch.Options{InputDir: input, OutputDir: output, ResourcePacks: []string{pack}}); err != nil {
 		t.Fatal(err)
 	}
-	old := readJSON[asset.Model](t, filepath.Join(input, original))
-	updated := readJSON[asset.Model](t, filepath.Join(output, original))
+	old := readJSON[jmodel.Model](t, filepath.Join(input, original))
+	updated := readJSON[jmodel.Model](t, filepath.Join(output, original))
 	if old.Textures["source"].Sprite != "block/old" || updated.Textures["source"].Sprite != "block/new" {
 		t.Fatal("overlay did not preserve stage boundaries")
 	}
@@ -373,9 +373,9 @@ func TestJava1214BedHangingSignAndBannerPreviews(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, family := range map[asset.ID]string{"minecraft:red_bed": "bed", "minecraft:oak_wall_hanging_sign": "sign", "minecraft:red_banner": "banner"} {
+	for name, family := range map[jmodel.ResourceID]string{"minecraft:red_bed": "bed", "minecraft:oak_wall_hanging_sign": "sign", "minecraft:red_banner": "banner"} {
 		plan := plans.Blocks[name]
-		if plan.Kind != asset.RendererSpecial || !plan.StaticPreview || plan.Family != family {
+		if plan.Kind != jmodel.RendererSpecial || !plan.StaticPreview || plan.Family != family {
 			t.Fatalf("wrong static preview for %s: %+v", name, plan)
 		}
 	}
@@ -387,7 +387,7 @@ func TestJava1214BedHangingSignAndBannerPreviews(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"entity/bed/red", "entity/signs/hanging/oak", "entity/banner_base"} {
-		if _, ok := atlas.Textures[name]; !ok {
+		if _, ok := atlas.Textures[jmodel.ResourceID("minecraft:"+name)]; !ok {
 			t.Fatalf("missing old-version skin %s", name)
 		}
 	}

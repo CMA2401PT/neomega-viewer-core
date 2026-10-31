@@ -10,25 +10,24 @@ import (
 	"io"
 	"os"
 
-	"neomega-assets/asset"
-	"neomega-assets/parse"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 type blockResult struct {
-	ID       asset.ID            `json:"id"`
-	State    asset.BlockState    `json:"state"`
-	Renderer asset.BlockRenderer `json:"renderer"`
+	ID       jmodel.ResourceID    `json:"id"`
+	Rules    jmodel.ModelRules    `json:"rules"`
+	Renderer jmodel.BlockRenderer `json:"renderer"`
 }
 
 type modelResult struct {
-	ID         asset.ID    `json:"id"`
-	Definition asset.Model `json:"definition"`
+	ID         jmodel.ResourceID `json:"id"`
+	Definition jmodel.Model      `json:"definition"`
 }
 
 type textureResult struct {
-	ID     asset.ID           `json:"id"`
-	UV     asset.AtlasTexture `json:"uv"`
-	Pixels image.Rectangle    `json:"pixels"`
+	ID     jmodel.ResourceID   `json:"id"`
+	UV     jmodel.AtlasTexture `json:"uv"`
+	Pixels image.Rectangle     `json:"pixels"`
 }
 
 type summary struct {
@@ -51,49 +50,49 @@ func run(args []string, output io.Writer) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
-	assets, err := parse.Load(*dir)
+	assets, err := jmodel.Load(*dir)
 	if err != nil {
 		return err
 	}
 	result := summary{
-		Version:     assets.BuildInfo.Version,
-		BlockStates: len(assets.BlockStates),
+		Version:     assets.Info.Version,
+		BlockStates: len(assets.Rules),
 		Models:      len(assets.Models),
 		Textures:    len(assets.Atlas.Textures),
 		PNGSize:     [2]int{assets.AtlasImage.Bounds().Dx(), assets.AtlasImage.Bounds().Dy()},
 	}
 	if *blockName != "" {
-		id, err := asset.ParseID(*blockName)
+		id, err := jmodel.ParseResourceID(*blockName)
 		if err != nil {
 			return err
 		}
-		state, ok := assets.BlockState(id)
+		state, ok := assets.Rules[id]
 		if !ok {
 			return fmt.Errorf("block %s not found", id)
 		}
-		result.Block = &blockResult{ID: id, State: state, Renderer: assets.Renderers.Blocks[id]}
+		result.Block = &blockResult{ID: id, Rules: state, Renderer: assets.Renderers.Blocks[id]}
 	}
 	if *modelName != "" {
-		id, err := asset.ParseID(*modelName)
+		id, err := jmodel.ParseResourceID(*modelName)
 		if err != nil {
 			return err
 		}
-		model, ok := assets.Model(id)
+		model, ok := assets.Models[id]
 		if !ok {
 			return fmt.Errorf("model %s not found", id)
 		}
 		result.Model = &modelResult{ID: id, Definition: model}
 	}
 	if *textureName != "" {
-		id, err := asset.ParseID(*textureName)
+		id, err := jmodel.ParseResourceID(*textureName)
 		if err != nil {
 			return err
 		}
-		texture, ok := assets.Texture(id)
+		texture, ok := assets.Atlas.Textures[id]
 		if !ok {
 			return fmt.Errorf("texture %s not found", id)
 		}
-		pixels, _ := assets.TextureRect(id)
+		pixels, _ := assets.Atlas.PixelRect(id)
 		result.Texture = &textureResult{ID: id, UV: texture, Pixels: pixels}
 	}
 	encoder := json.NewEncoder(output)

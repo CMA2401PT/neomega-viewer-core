@@ -17,6 +17,7 @@ import (
 	"neomega-assets/s03_models"
 	"neomega-assets/utils/jsonfile"
 	"neomega-assets/utils/resourcefiles"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 type Options struct {
@@ -45,7 +46,7 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 	if err != nil {
 		return nil, err
 	}
-	blockstates, err := jsonfile.Read[asset.BlockStates](filepath.Join(opt.ModelDir, "blockstates.json"))
+	blockstates, err := jsonfile.Read[jmodel.RuleTable](filepath.Join(opt.ModelDir, "blockstates.json"))
 	if err != nil {
 		return nil, err
 	}
@@ -66,16 +67,16 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 		index:          index,
 		snapshot:       &snapshot,
 		output:         opt.OutputDir,
-		importing:      map[asset.ID]bool{},
-		neededTextures: map[asset.ID]bool{},
+		importing:      map[jmodel.ResourceID]bool{},
+		neededTextures: map[jmodel.ResourceID]bool{},
 	}
 	renderers := &asset.Renderers{
 		Version:        snapshot.Version,
-		Blocks:         map[asset.ID]asset.BlockRenderer{},
-		FamilyTextures: map[string][]asset.ID{},
-		Counts:         map[asset.RendererKind]int{},
+		Blocks:         map[jmodel.ResourceID]jmodel.BlockRenderer{},
+		FamilyTextures: map[string][]jmodel.ResourceID{},
+		Counts:         map[jmodel.RendererKind]int{},
 	}
-	empty := map[asset.ID]bool{}
+	empty := map[jmodel.ResourceID]bool{}
 	for _, id := range report.GeometrylessBlockStates {
 		empty[id] = true
 	}
@@ -84,11 +85,11 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		id, err := asset.ParseID(name)
+		id, err := jmodel.ParseResourceID(string(name))
 		if err != nil {
 			return nil, err
 		}
-		var profile asset.BlockRenderer
+		var profile jmodel.BlockRenderer
 		if !empty[id] {
 			profile = resources.ModelRenderer(id)
 		} else if known, ok := classifyEmpty(id); ok {
@@ -140,7 +141,7 @@ func Run(ctx context.Context, opt Options) (*asset.Renderers, error) {
 	}
 	// Keep the dynamic family's resources even when a closed/static preview
 	// does not directly sample them.
-	required := map[asset.ID]bool{}
+	required := map[jmodel.ResourceID]bool{}
 	for _, id := range completed.RequiredTextures {
 		required[id] = true
 	}

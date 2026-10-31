@@ -8,7 +8,7 @@
 
 ## 先得到一份输出
 
-需要 Go 1.25.5 或以上。实现只使用 Go 标准库。JAR 当作 ZIP 读取，因此运行工具不需要 Java、Node.js 或原生 canvas。
+需要 Go 1.25.5 或以上。需要相邻的 `neomega-blocks` 与 `neomega-nbt` 模块。共享模型定义和解析来自 `neomega-blocks/geometry/java_block_model`，提取与图集处理使用 Go 标准库。JAR 当作 ZIP 读取，因此运行工具不需要 Java、Node.js 或原生 canvas。
 
 在 `neomega-assets` 目录执行：
 
@@ -38,29 +38,25 @@ go run ./cmd/neomega-assets build -jar /path/to/client.jar
 
 ## 读取交付文件
 
-拿到输出后，消费者只需要 `dist/final`。`blockstates.json` 与 `models.json` 的根对象分别是资源名到定义的映射；`blocksAtlases.json` 的根对象直接包含 `textures`、尺寸和 UV 比例。这些文件没有 `latest` 层，也没有额外的合并文件。
+拿到输出后，消费者只需要 `dist/final`。`blockstates.json` 与 `models.json` 的根对象分别是资源名到定义的映射；`blocksAtlases.json` 的根对象直接包含 `textures`、尺寸和 UV 比例。这些文件没有 `latest` 层，也没有额外的合并文件。交付索引使用完整资源 ID，例如 `minecraft:stone`、`minecraft:block/stone` 和 `minecraft:entity/chest/normal`。
 
 可以先运行独立的解析示例，确认应用会读到什么：
 
 ```sh
-go run ./parse/cli -dir dist/final
-go run ./parse/cli -dir dist/final \
+go run ./cmd/inspect-resources -dir dist/final
+go run ./cmd/inspect-resources -dir dist/final \
   -block minecraft:chest \
   -model minecraft:block/stone \
   -texture minecraft:entity/chest/normal
 ```
 
-示例读取全部表格和 PNG，再输出数量、指定方块的模型选择与渲染需求、模型定义和纹理像素范围。在 Go 应用中使用 `parse.Load`，或者只读取需要的单张表。示例代码和完整用法见 [parse/README.md](parse/README.md)。
+示例读取全部表格和 PNG，再输出数量、指定方块的模型选择与渲染需求、模型定义和纹理像素范围。在 Go 应用中使用 `java_block_model.Load`，或者只读取需要的单张表。示例代码和模型解释流程见 [模型包说明](../neomega-blocks/geometry/java_block_model/README.md)。
 
-## 方块实心表
+## 从资源得到方块几何
 
-除了渲染资源，这里还分发一份方块实心表：每个 Java 状态六个 bit，对应 west/east/down/up/north/south 六个面是否被
-不透明矩形完整覆盖。neomega-converter 修复栅栏连接这类状态时，靠它判断邻居的某一面是不是实心墙。
+`dist/final` 保存模型、状态、渲染类别和图集。消费者根据完整 Java 状态选择模型，再解析继承与旋转，得到局部几何。
 
-实心表要从方块几何算出来，所以由 neomega-viewer 的几何生成器产出，写到 `solidtable/geometry.nvsolid`。本仓库
-只负责保存和分发：`solidtable.Bundled()` 返回内嵌的表，多个调用方共享同一份解码结果；`Table.Encode` 和 `Decode`
-读写 NVST v1 格式。NVST v1 使用小端布局：4 字节 magic `NVST`、uint32 版本、uint32 条目数，随后是按 hash 排序的
-N 条 `(uint32 javaHash, uint8 solid)`，每条 5 字节。位域 bit0…bit5 依次对应上面六个面。
+模型定义、共享解析与烘焙由 `neomega-blocks/geometry/java_block_model` 提供，覆盖计算由 `geometry` 提供。具体方块由 `ir.IRBlock` 表示；资源包的模型选择规则与方块身份分开。预置的 Java 几何表、Java 元数据和六方向实心表由 neomega-blocks 的生成器统一产出，分别供 viewer 和 converter/fixer 加载。更新时手动复制六份匹配的交付输入，再运行 `go generate`，具体命令见[几何生成说明](../neomega-blocks/third_party/gen_resource/geometry/solid_block_table/README.md)。
 
 ## 为什么分成五步
 
@@ -156,9 +152,9 @@ go run ./cmd/neomega-assets models \
 
 输出保留继承、变体、权重和逻辑条件。解析用于检查关系和收集纹理，具体选择仍由消费者根据方块状态完成。
 
-类型集中在 [asset/model.go](asset/model.go)。其中用明确类型区分单个模型与加权候选、属性比较与 `OR`/`AND`、继承几何与显式清空几何，以及字符串纹理与现代 `sprite` 材质对象。未解释的模型顶层扩展字段也会保留。
+模型类型集中在 [java_block_model](../neomega-blocks/geometry/java_block_model/README.md)，assets 的 `asset` 包保留提取快照、构建报告和源纹理动画元数据。其中用明确类型区分单个模型与加权候选、属性比较与 `OR`/`AND`、继承几何与显式清空几何，以及字符串纹理与现代 `sprite` 材质对象。未解释的模型顶层扩展字段也会保留。
 
-实现入口：[s03_models/models.go](s03_models/models.go)；继承和纹理变量解析见 [s03_models/resolve.go](s03_models/resolve.go)。
+实现入口：[s03_models/models.go](s03_models/models.go)；继承和纹理变量解析见 [共享 Resolver](../neomega-blocks/geometry/java_block_model/resolve.go)。
 
 ## 第四步：让特殊方块有可用的外形，并说明边界
 
@@ -193,11 +189,11 @@ go run ./cmd/neomega-assets special \
 
 为让专用渲染器也有素材可用，`familyTextures` 保留相应纹理族，包括静态预览未直接引用的箱子皮肤、旗帜图案等。它们也会进入第五步的图集。
 
-渲染说明表的键始终包含命名空间，例如 `minecraft:chest`。方块状态表和模型表省略默认的 `minecraft:`。`parse` 的查询方法接收完整资源 ID，并自动转换为相应表的键。
+渲染说明、模型规则、模型与图集的键统一使用完整资源 ID。消费者直接按完整名称查询，不再为不同表裁剪命名空间或纹理路径。
 
 遇到未识别的无几何方块时，这一步报错，并给出资源 ID。新增游戏方块后，应先判断它属于静态模型、流体还是其他渲染方式，再增加相应支持。
 
-实现入口：[s04_special/special.go](s04_special/special.go)；分类、运行时需求与模板适配规则见 [resources/special.go](resources/special.go)，表类型见 [asset/render.go](asset/render.go)。
+实现入口：[s04_special/special.go](s04_special/special.go)；分类、运行时需求与模板适配规则见 [resources/special.go](resources/special.go)，共享类别与描述见 [java_block_model/render.go](../neomega-blocks/geometry/java_block_model/render.go)，来源与统计报告见 [asset/render.go](asset/render.go)。
 
 ## 第五步：把所需纹理放进图集
 
@@ -226,7 +222,7 @@ go run ./cmd/neomega-assets atlas \
 
 图集大小受排列方式和纹理尺寸影响，不能单凭 PNG 外观判断完整性。需要核对 JAR 纹理、模型引用，以及旧版可见方块是否仍有外形。
 
-完成上述构建后，可以和工作区中 viewer 的资源比较：
+需要比较历史资源覆盖时，先准备旧 `mc-viewer-svelte` 的 mc-assets 对照目录。该目录不是本仓库的生成产物；下面命令中的路径应指向实际取得的对照文件：
 
 ```sh
 go run ./cmd/neomega-assets audit \
@@ -240,7 +236,7 @@ go run ./cmd/neomega-assets audit \
 
 这条命令检查原始 JAR 的方块纹理是否全部收录、所需纹理是否存在、PNG 尺寸与坐标是否一致，并比较补全前后的几何覆盖。全部差异名称保存在 JSON 中。**它检查资源覆盖，不等同于运行游戏渲染器逐像素比对外观。**
 
-以下数据来自 `build -jar .cache/1.21.4/client.jar` 和上述 `audit` 命令，没有额外覆盖包：
+下表的构建统计可由 `build -jar .cache/1.21.4/client.jar` 复现，不添加覆盖包。旧 viewer 对照数量来自随库保存的 [核对报告](resources/audits/1.21.4-vs-viewer.json)，重新核对需要上述历史输入目录：
 
 | 项目 | 结果 |
 |---|---:|
@@ -259,7 +255,7 @@ go run ./cmd/neomega-assets audit \
 
 ## 与 mc-viewer-svelte 衔接
 
-资源生成完整之后，还需要消费者理解相应格式。资源命名、图集文件名和 UV 字段参考 `mc-assets`，但本工具交付拆开的单版本表。旧 viewer 读取的合并文件和 `latest` 包装层需要改为读取 `blockstates.json`、`models.json` 与展开的 `blocksAtlases.json`。`blockRenderers.json` 补充特殊渲染需求。
+资源生成完整之后，还需要消费者理解相应格式。资源命名、图集文件名和 UV 字段参考 `mc-assets`，但本工具交付拆开的单版本表。旧 viewer 需要按完整资源 ID 查询模型与纹理，并将合并文件和 `latest` 包装层改为读取 `blockstates.json`、`models.json` 与展开的 `blocksAtlases.json`。`blockRenderers.json` 补充特殊渲染需求。
 
 当前 viewer 的方块状态数据仍基于 Java `1.20.2`。要显示 1.21.4 资源，需要同步更新状态数据与模型消费者，并接入渲染说明表。
 
@@ -288,7 +284,7 @@ func complete(ctx context.Context) error {
 
 其他步骤同样提供 `Options` 和 `Run`。较长的文件处理接收 `context.Context`，便于取消。
 
-扩展前先判断变化属于哪个问题：资源替换放在第二步的覆盖包；新模型字段放在 `asset` 类型和第三步解析；新特殊渲染需求和模板适配放在 `resources/special.go`，附带模板放在 `resources/third_party`，由第四步应用；纹理采样和排列放在第五步。更新附带模板时，应同步更新来源索引、作者声明与许可文件，并重跑资源核对。
+扩展前先判断变化属于哪个问题：资源替换放在第二步的覆盖包；新模型字段放在 blocks 的 `geometry/java_block_model`，第三步直接使用共享解析；新特殊渲染需求和模板适配放在 `resources/special.go`，附带模板放在 `resources/third_party`，由第四步应用；纹理采样和排列放在第五步。更新附带模板时，应同步更新来源索引、作者声明与许可文件，并重跑资源核对。
 
 ## 验证实现
 

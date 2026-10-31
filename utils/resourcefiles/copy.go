@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"neomega-assets/asset"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 func CopyFile(source, destination string) error {
@@ -32,7 +33,7 @@ func CopyFile(source, destination string) error {
 }
 
 func CopySnapshot(ctx context.Context, snapshot asset.Snapshot, input, output string) error {
-	for _, files := range []map[asset.ID]asset.File{snapshot.BlockStates, snapshot.Models, snapshot.Textures, snapshot.TextureMetadata} {
+	for _, files := range []map[jmodel.ResourceID]asset.File{snapshot.BlockStates, snapshot.Models, snapshot.Textures, snapshot.TextureMetadata} {
 		for _, file := range files {
 			if err := ctx.Err(); err != nil {
 				return err

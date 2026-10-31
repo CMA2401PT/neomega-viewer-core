@@ -1,34 +1,12 @@
-// SPDX-License-Identifier: MIT
 package asset
 
-// RendererKind describes the information a consumer needs beyond a model lookup.
-type RendererKind string
-
-const (
-	RendererModel     RendererKind = "model"
-	RendererSpecial   RendererKind = "special"
-	RendererFluid     RendererKind = "fluid"
-	RendererInvisible RendererKind = "invisible"
-	RendererDynamic   RendererKind = "dynamic"
-)
-
-// BlockRenderer separates static previews from state-dependent rendering. Static
-// previews use the augmented blockstates and models tables; DynamicFields are inputs
-// required for the game's animated/customized appearance.
-type BlockRenderer struct {
-	Kind            RendererKind `json:"kind"`
-	Family          string       `json:"family,omitempty"`
-	StaticPreview   bool         `json:"staticPreview"`
-	StateProperties []string     `json:"stateProperties,omitempty"`
-	DynamicFields   []string     `json:"dynamicFields,omitempty"`
-	TemplateSource  string       `json:"templateSource,omitempty"`
-}
+import jmodel "neomega-blocks/geometry/java_block_model"
 
 type Renderers struct {
 	Version string `json:"version"`
-	// Keys are canonical resource IDs, unlike blockstate/model export names.
-	Blocks         map[ID]BlockRenderer `json:"blocks"`
-	FamilyTextures map[string][]ID      `json:"familyTextures"`
-	Counts         map[RendererKind]int `json:"counts"`
-	Sources        []Source             `json:"sources"`
+	// Shared rendering descriptors are accompanied by producer-only provenance and counts.
+	Blocks         map[jmodel.ResourceID]jmodel.BlockRenderer `json:"blocks"`
+	FamilyTextures map[string][]jmodel.ResourceID             `json:"familyTextures"`
+	Counts         map[jmodel.RendererKind]int                `json:"counts"`
+	Sources        []Source                                   `json:"sources"`
 }

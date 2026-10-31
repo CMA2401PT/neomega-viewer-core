@@ -2,11 +2,11 @@
 
 图集外观和纹理数量不能直接说明资源是否完整。版本变化会带来重命名和纹理布局调整，而箱子、床等方块还需要 JAR 以外的静态模型。因此核对同时检查纹理收录与可见几何。
 
-默认目标为 Java 1.21.4，与 `neomega-blocks` 的 Java 输出一致。逐项名称保存在 [1.21.4-vs-viewer.json](1.21.4-vs-viewer.json)。[26.3-vs-viewer.json](26.3-vs-viewer.json) 保留了先前对 26.3 输入的核对记录。
+默认目标为 Java 1.21.4，与 `neomega-blocks` 的 Java 输出一致。下列对照数量引用随库保存的历史核对记录，逐项名称保存在 [1.21.4-vs-viewer.json](1.21.4-vs-viewer.json)。[26.3-vs-viewer.json](26.3-vs-viewer.json) 保留了先前对 26.3 输入的核对记录。
 
 ## 输入与复现
 
-当前资源来自 Mojang 的 Java 1.21.4 客户端 JAR。对照资源是工作区 `mc-viewer-svelte/src/lib/Viewer/generate_res/mc-assets` 中的模型表和图集坐标表。对照文件中的 `latest` 包含历史名称，因此需要结合当前 JAR 核实差异。
+当前资源来自 Mojang 的 Java 1.21.4 客户端 JAR。对照资源是工作区 `mc-viewer-svelte/src/lib/Viewer/generate_res/mc-assets` 中的模型表和图集坐标表。复跑前需要另外准备该历史目录，并将命令中的 `-baseline` 改为实际路径。对照文件中的 `latest` 包含历史名称，因此需要结合目标 JAR 核实差异。
 
 在 `neomega-assets` 目录执行：
 
@@ -21,7 +21,7 @@ go run ./cmd/neomega-assets audit \
   -out resources/audits/1.21.4-vs-viewer.json
 ```
 
-报告中的“补全前”读取第三步模型，“补全后”读取最终产物。需要确认转换结果能使用这些资源时，再运行 `neomega-blocks` README 中的 `TestJavaTargetAssets`，将真实 palette 的转换输出与资源版本、方块名和 variant 核对。
+报告中的“补全前”读取第三步模型，“补全后”读取最终产物。需要确认转换结果能使用这些资源时，再运行 [blocks 生成工具说明](../../../neomega-blocks/third_party/gen_resource/README.md)中的 `TestJavaTargetAssets`，将真实 palette 的转换输出与资源版本、方块名和 variant 核对。
 
 ## 纹理是否有遗漏
 
@@ -41,7 +41,7 @@ go run ./cmd/neomega-assets audit \
 
 补充特殊模型与纹理族之前，旧表中有 57 个仍存在于当前 JAR 的纹理名没有进入原始图集选择。它们的名称见报告的 `beforeMissingBaselineTextures`。最终这些纹理均已收录。
 
-最终 PNG 为 1024×1024。核对命令确认坐标表尺寸与实际 PNG 一致，并检查所有纹理矩形位于图内。
+随库历史报告中的 PNG 为 1024×1024。使用完整动画条带的 Java 1.21.4 构建输出为 2048×2048；实际尺寸由纹理集合与帧信息决定。核对命令检查坐标表尺寸与 PNG 一致，并检查所有纹理矩形位于图内。
 
 ## 模型是否仍然可见
 

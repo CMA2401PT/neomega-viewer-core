@@ -19,6 +19,7 @@ import (
 	"neomega-assets/utils/jsonfile"
 	"neomega-assets/utils/legal"
 	"neomega-assets/utils/resourcefiles"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 type Options struct {
@@ -28,12 +29,13 @@ type Options struct {
 	TileSize  int
 }
 type textureImage struct {
+	id        jmodel.ResourceID
 	image     *image.NRGBA
 	frames    int
 	frameTime int
 }
 
-func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
+func Run(ctx context.Context, opt Options) (*jmodel.Atlas, error) {
 	if opt.TileSize == 0 {
 		opt.TileSize = 16
 	}
@@ -58,7 +60,7 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 	if snapshot.Version != report.Version {
 		return nil, fmt.Errorf("model table version %s differs from texture version %s", report.Version, snapshot.Version)
 	}
-	selected := map[asset.ID]bool{}
+	selected := map[jmodel.ResourceID]bool{}
 	for id := range snapshot.Textures {
 		if strings.HasPrefix(id.Path(), "block/") || strings.HasPrefix(id.Path(), "blocks/") {
 			selected[id] = true
@@ -67,7 +69,7 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 	for _, id := range report.RequiredTextures {
 		selected[id] = true
 	}
-	ids := make([]asset.ID, 0, len(selected))
+	ids := make([]jmodel.ResourceID, 0, len(selected))
 	for id := range selected {
 		ids = append(ids, id)
 	}
@@ -103,7 +105,7 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 			width = frame.Dx()
 			height = frame.Dy()
 		}
-		texture := textureImage{frames: 1}
+		texture := textureImage{id: id, frames: 1}
 		if isBlock && metadata.Animation != nil {
 			texture.image, texture.frames, err = renderAnimation(img, metadata.Animation, opt.TileSize)
 			if err != nil {
@@ -118,7 +120,7 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 		} else {
 			texture.image = renderTexture(img, frame, width, height)
 		}
-		name := id.TextureName()
+		name := packingName(id)
 		if _, exists := images[name]; exists {
 			return nil, fmt.Errorf("atlas key collision at %s", name)
 		}
@@ -131,14 +133,14 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 	if err != nil {
 		return nil, err
 	}
-	atlas := asset.Atlas{Textures: map[string]asset.AtlasTexture{}, Width: size, Height: size, TileSize: opt.TileSize, SUSV: float64(opt.TileSize) / float64(size)}
+	atlas := jmodel.Atlas{Textures: map[jmodel.ResourceID]jmodel.AtlasTexture{}, Width: size, Height: size, TileSize: opt.TileSize, SUSV: float64(opt.TileSize) / float64(size)}
 	canvas := image.NewNRGBA(image.Rect(0, 0, size, size))
 	for _, rect := range packed {
 		texture := images[rect.name]
 		target := image.Rectangle{Min: rect.position, Max: rect.position.Add(texture.image.Bounds().Size())}
 		draw.Draw(canvas, target, texture.image, texture.image.Bounds().Min, draw.Src)
 		// 坐标覆盖整条动画，下游按帧数纵向切分。
-		atlas.Textures[rect.name] = asset.AtlasTexture{
+		atlas.Textures[texture.id] = jmodel.AtlasTexture{
 			U:         float64(target.Min.X) / float64(size),
 			V:         float64(target.Min.Y) / float64(size),
 			SU:        float64(target.Dx()) / float64(size),
@@ -179,4 +181,14 @@ func Run(ctx context.Context, opt Options) (*asset.Atlas, error) {
 		return nil, err
 	}
 	return &atlas, nil
+}
+
+// packingName orders tiles by their atlas-local path. Resource lookup and the
+// exported coordinate table use the full ID, independent of the packing order.
+func packingName(id jmodel.ResourceID) string {
+	name := strings.TrimPrefix(strings.TrimPrefix(id.Path(), "block/"), "blocks/")
+	if id.Namespace() != "minecraft" {
+		name = id.Namespace() + ":" + name
+	}
+	return name
 }

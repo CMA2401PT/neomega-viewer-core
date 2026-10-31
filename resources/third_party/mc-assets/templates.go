@@ -8,19 +8,20 @@ import (
 	"encoding/json"
 
 	"neomega-assets/asset"
+	jmodel "neomega-blocks/geometry/java_block_model"
 )
 
 //go:embed templates
 var Files embed.FS
 
 type Index struct {
-	Repository string              `json:"repository"`
-	Revision   string              `json:"revision"`
-	States     map[asset.ID]string `json:"states"`
-	Models     map[asset.ID]string `json:"models"`
-	Textures   map[asset.ID]string `json:"textures"`
-	Origins    map[string]string   `json:"origins"`
-	Credits    []string            `json:"credits"`
+	Repository string                       `json:"repository"`
+	Revision   string                       `json:"revision"`
+	States     map[jmodel.ResourceID]string `json:"states"`
+	Models     map[jmodel.ResourceID]string `json:"models"`
+	Textures   map[jmodel.ResourceID]string `json:"textures"`
+	Origins    map[string]string            `json:"origins"`
+	Credits    []string                     `json:"credits"`
 }
 
 func Load() (Index, error) {
@@ -39,7 +40,7 @@ func Read(path string) ([]byte, error) {
 }
 
 // StateOrigin maps an embedded state back to its original upstream path.
-func (index Index) StateOrigin(id asset.ID) string {
+func (index Index) StateOrigin(id jmodel.ResourceID) string {
 	return index.origin(index.States[id])
 }
 
