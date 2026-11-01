@@ -202,10 +202,10 @@ func Run(opt Options) (*Report, error) {
 	for name, texture := range current.Textures {
 		su, sv := texture.SU, texture.SV
 		if su == 0 {
-			su = current.SUSV
+			su = float64(current.TileSize) / float64(current.Width)
 		}
 		if sv == 0 {
-			sv = current.SUSV
+			sv = float64(current.TileSize) / float64(current.Height)
 		}
 		x := int(math.Round(texture.U * float64(config.Width)))
 		y := int(math.Round(texture.V * float64(config.Height)))

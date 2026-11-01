@@ -133,19 +133,19 @@ func Run(ctx context.Context, opt Options) (*jmodel.Atlas, error) {
 	if err != nil {
 		return nil, err
 	}
-	atlas := jmodel.Atlas{Textures: map[jmodel.ResourceID]jmodel.AtlasTexture{}, Width: size, Height: size, TileSize: opt.TileSize, SUSV: float64(opt.TileSize) / float64(size)}
-	canvas := image.NewNRGBA(image.Rect(0, 0, size, size))
+	atlas := jmodel.Atlas{Textures: map[jmodel.ResourceID]jmodel.AtlasTexture{}, Width: size.X, Height: size.Y, TileSize: opt.TileSize}
+	canvas := image.NewNRGBA(image.Rect(0, 0, size.X, size.Y))
 	for _, rect := range packed {
 		texture := images[rect.name]
 		target := image.Rectangle{Min: rect.position, Max: rect.position.Add(texture.image.Bounds().Size())}
 		draw.Draw(canvas, target, texture.image, texture.image.Bounds().Min, draw.Src)
 		// 坐标覆盖整条动画，下游按帧数纵向切分。
 		atlas.Textures[texture.id] = jmodel.AtlasTexture{
-			U:         float64(target.Min.X) / float64(size),
-			V:         float64(target.Min.Y) / float64(size),
-			SU:        float64(target.Dx()) / float64(size),
-			SV:        float64(target.Dy()) / float64(size),
-			TileIndex: target.Min.Y/opt.TileSize*(size/opt.TileSize) + target.Min.X/opt.TileSize,
+			U:         float64(target.Min.X) / float64(size.X),
+			V:         float64(target.Min.Y) / float64(size.Y),
+			SU:        float64(target.Dx()) / float64(size.X),
+			SV:        float64(target.Dy()) / float64(size.Y),
+			TileIndex: target.Min.Y/opt.TileSize*(size.X/opt.TileSize) + target.Min.X/opt.TileSize,
 			Frames:    texture.frames,
 			FrameTime: texture.frameTime,
 		}

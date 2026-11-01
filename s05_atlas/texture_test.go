@@ -23,12 +23,12 @@ func TestAnimationGridCoordinates(t *testing.T) {
 func TestPackReusesSpaceBelowShortRectangles(t *testing.T) {
 	// These exactly fill a 64x64 image; row-only packing wastes the space under b.
 	packed, size, err := pack([]rectangle{{name: "a", width: 32, height: 64}, {name: "b", width: 32, height: 32}, {name: "c", width: 32, height: 32}}, 16)
-	if err != nil || size != 64 {
-		t.Fatalf("packed side %d: %v", size, err)
+	if err != nil || size != image.Pt(64, 64) {
+		t.Fatalf("packed size %v: %v", size, err)
 	}
 	for i, a := range packed {
 		ra := image.Rectangle{Min: a.position, Max: a.position.Add(image.Pt(a.width, a.height))}
-		if !ra.In(image.Rect(0, 0, size, size)) {
+		if !ra.In(image.Rect(0, 0, size.X, size.Y)) {
 			t.Fatal("out of bounds")
 		}
 		for _, b := range packed[:i] {
@@ -37,5 +37,32 @@ func TestPackReusesSpaceBelowShortRectangles(t *testing.T) {
 				t.Fatal("overlapping textures")
 			}
 		}
+	}
+}
+
+func TestPackUsesIndependentPowerOfTwoDimensions(t *testing.T) {
+	// Seventeen tiles exceed 64x64, but fit 128x64 without a 128x128 square.
+	input := make([]rectangle, 17)
+	for i := range input {
+		input[i] = rectangle{width: 16, height: 16}
+	}
+	packed, size, err := pack(input, 16)
+	if err != nil || size != image.Pt(128, 64) {
+		t.Fatalf("size=%v error=%v", size, err)
+	}
+	for i, rect := range packed {
+		bounds := image.Rectangle{Min: rect.position, Max: rect.position.Add(image.Pt(rect.width, rect.height))}
+		if !bounds.In(image.Rectangle{Max: size}) {
+			t.Fatal("outside rectangular atlas")
+		}
+		for _, previous := range packed[:i] {
+			if bounds.Overlaps(image.Rectangle{Min: previous.position, Max: previous.position.Add(image.Pt(previous.width, previous.height))}) {
+				t.Fatal("overlapping textures")
+			}
+		}
+	}
+	_, size, err = pack([]rectangle{{width: 16, height: 128}}, 16)
+	if err != nil || size != image.Pt(16, 128) {
+		t.Fatalf("vertical strip: size=%v error=%v", size, err)
 	}
 }
