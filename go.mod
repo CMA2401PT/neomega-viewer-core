@@ -1,10 +1,15 @@
-module neomega-assets
+module neomega-viewer-core
 
 go 1.25.5
 
-require neomega-blocks v0.0.0
+require (
+	celler v0.0.0
+	neomega-blocks v0.0.0
+)
 
-require neomega-nbt v0.0.0 // indirect
+require neomega-nbt v0.0.0
+
+replace celler => ../neomega-celler
 
 replace neomega-blocks => ../neomega-blocks
 

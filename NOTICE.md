@@ -1,37 +1,25 @@
-# 来源与许可说明
+# 来源与许可
 
-`neomega-assets` 是用 Go 编写的资源整理工具。流程组织参考本工作区的 `my-mc-assets`。输出约定参考 `zardoy/mc-assets`，特殊方块的静态预览使用该项目的一部分模型与纹理。
+本项目原创的 Go 几何与修复、TypeScript 绘制适配和示例采用 [MIT](LICENSE)。下列依赖和输入素材的许可独立保留。
 
-## mc-assets 的参考与附带资源
+## 绘制代码
 
-- 项目：[zardoy/mc-assets](https://github.com/zardoy/mc-assets)
-- 固定提交：`c63d6dacd358a8ea73b453d6958167b49dcc3f6c`
-- 上游声明：`Copyright 2024 Vitaly Turovsky, contributors`
-- 上游许可证：MIT，完整原文见 [resources/third_party/mc-assets/LICENSE](resources/third_party/mc-assets/LICENSE)。
+浏览器使用 [Three.js](https://github.com/mrdoob/three.js)，版本由 `viewer/web/package-lock.json` 固定为 0.186.1。
 
-参考位置与实现的关系如下：
+`Copyright © 2010-2026 three.js authors`
 
-| 上游位置 | 对应职责 |
-|---|---|
-| `src/datapaths-builder.ts` | `s01_extract` 的资源类别、目录与索引概念 |
-| `src/newAssetsBuilder.ts`、`src/consumer/types.ts` | blocks 的 `geometry/java_block_model` 模型结构与本工具 `s03_models` 的导出约定 |
-| `custom/blockentities/1.13`、`1.20`、`latest` 及 `custom/textures` | `s04_special` 使用的社区静态预览素材 |
-| `src/genBlocks.ts`、`src/consumer/atlasCreator.ts` | `s05_atlas` 的产物名称、纹理类别与 UV 字段约定 |
+Three.js 的 MIT 原文保存在 [viewer/web/THREE-LICENSE.txt](viewer/web/THREE-LICENSE.txt)。Vite 和 TypeScript 是构建依赖，各自保留包内许可。
 
-下载、JAR 读取、模型图检查、PNG 处理和格子装箱由 Go 标准库实现。相关 Go 文件包含 SPDX 标识及来源注释。
+## 状态与资源
 
-附带的素材保存在 [resources/third_party/mc-assets/templates](resources/third_party/mc-assets/templates)，包含 150 份方块状态模板、234 份依赖模型和 17 张自定义纹理。文件对应关系保存在 `index.json`。这些文件来自上述固定提交，原有模型署名保留，其中包括 `Made with Blockbench by TyBraniff for Bluemaps support.`。
+子区块使用相邻 `neomega-celler` 中的 `celler/layer_storage.Palette[uint32]` 存储接口。
 
-手工维护的分类与适配规则集中在 [resources/special.go](resources/special.go)，由第四步应用。导入时会改写模型命名空间、规范化资源引用、适配旗帜纹理的新路径，并为染色潜影盒选择对应皮肤。完整说明见 [模板来源与适配](resources/third_party/mc-assets/README.md)。这些适配不会改变原素材的权利来源。
+Java 状态全集和方块哈希使用相邻的 `neomega-blocks` preset。转换数据的准备依赖 Amulet Team 的 PyMCTranslate。本项目使用现有 Java 1.21.4 目标表；本地转换库记录的 build 317 对应上游 1.2.30。该版本采用 Amulet Team License 1.0.0，包含非商业、教育和非竞争等使用条款；它不是 MIT 许可。完整条款和来源见 [neomega-blocks 的声明](../neomega-blocks/third_party/pymctranslate-notices/NOTICE.md)。
 
-## my-mc-assets
+Required Notice: Copyright Amulet Team. (https://www.amuletmc.com/)
 
-本地 `../my-mc-assets` 的 `s01_extract_jar`、`s02_generate_model` 实验提供了分步流程参考。该本地项目的 `package.json` 标注 ISC；其中的模型和纹理仍须按各自原始来源识别许可。
+模型、纹理和特殊方块的静态外形来自 `viewer-assets` 交付文件。其中的社区模板来自 `zardoy/mc-assets` 固定提交 `c63d6dacd358a8ea73b453d6958167b49dcc3f6c`，声明为 `Copyright 2024 Vitaly Turovsky, contributors`，采用 MIT。原始模型署名由资源生成器保留。具体来源和适配关系见 [neomega-viewer-core/viewer-assets/NOTICE.md](viewer-assets/NOTICE.md)。
 
-## Minecraft 资源和覆盖包
+Minecraft 模型、纹理及其衍生素材保留原权利人的权利。资源提取、图集打包和顶点生成不产生新的素材授权。应用分发资源时，应保留 `dist/final/THIRD_PARTY_NOTICES.txt`，并遵守输入素材适用的 [Minecraft EULA](https://www.minecraft.net/eula)、[Usage Guidelines](https://www.minecraft.net/usage-guidelines) 和额外资源包条款。
 
-工具源码的 MIT 许可证授权工具源码及对应原创部分。Minecraft 模型、纹理及其衍生素材保留原权利人的权利。提取、整理、缩放或装入图集不会改变这些素材的许可来源，上游仓库的 MIT 声明也不应被视为 Mojang 素材的独立授权。
-
-使用与分发生成结果时，需要结合 [Minecraft EULA](https://www.minecraft.net/eula)、[Minecraft Usage Guidelines](https://www.minecraft.net/usage-guidelines) 和额外覆盖包的作者条款判断。
-
-JAR、提取目录和生成产物默认加入 `.gitignore`。`build-info.json` 和 `blockRenderers.json` 记录来源；导入模型保留原始署名。`THIRD_PARTY_NOTICES.txt` 包含来源说明和上游 MIT 文本。额外覆盖包的许可证应随使用其素材的分发结果一并保留。
+服务端分发时保留本文件、项目许可证、转换数据的许可声明与配套资源声明。单独分发网页时保留 Three.js 的许可文本；外部提供的模型和纹理仍按其自身来源附带声明。
