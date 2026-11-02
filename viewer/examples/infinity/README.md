@@ -38,4 +38,4 @@ go run .
 
 要验证移动和加载规则，在示例目录运行 `npm test`。它检查水平移动、升降、驻留上限、卸载和取消响应。工作区根目录的 `./check.sh neomega-viewer-core` 还会验证地形重建、邻接剔面、陶罐纹样与书本消息。
 
-贴图来源与许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2416/textures/THIRD_PARTY_NOTICES.txt) 和模块的 [NOTICE.md](../../../../neomega-viewer/NOTICE.md)。
+贴图来源与许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2416/textures/THIRD_PARTY_NOTICES.txt) 和模块的 [NOTICE.md](../../../../apps/neomega-viewer/NOTICE.md)。

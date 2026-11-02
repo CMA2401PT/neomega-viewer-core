@@ -39,4 +39,4 @@ func main() {
 单个 section 预览使用 `FixSection`，六面邻居顺序是西、东、下、上、北、南。
 修复规则及近似限制见 [FIXER.md](FIXER.md)。
 实心表由 [统一建表器](../../viewer-assets/cmd/build-tables/README.md) 生成。
-存档遍历、写回、实体与诊断保留由 [neomega-converter](../../../neomega-converter/README.md) 完成。
+存档遍历、写回、实体与诊断保留由 [neomega-converter](../../../apps/neomega-converter/README.md) 完成。

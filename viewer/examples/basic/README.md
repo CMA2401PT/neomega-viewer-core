@@ -23,4 +23,4 @@ go run .
 
 接着读 [main.ts](main.ts)：加载图集、请求网格、解码、创建绘制对象，最后设置相机和鼠标控制。网页的 `await` 用于等待网络结果；Go handler 内的构造、网格生成与编码按顺序执行。
 
-贴图的来源和许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2413/textures/THIRD_PARTY_NOTICES.txt) 与模块的 [NOTICE.md](../../../../neomega-viewer/NOTICE.md)。
+贴图的来源和许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2413/textures/THIRD_PARTY_NOTICES.txt) 与模块的 [NOTICE.md](../../../../apps/neomega-viewer/NOTICE.md)。

@@ -14,7 +14,7 @@ Go 负责网格构建及二进制编码，Web 包负责解码、材质、场景�
 三个示例分别展示静态子区块、附魔书与陶罐，以及按需生成的无限世界：
 [basic](examples/basic/README.md)、[spec_block](examples/spec_block/README.md)、[infinity](examples/infinity/README.md)。
 它们直接连接 Go 与 Web 核心，HTTP 接口由各示例自行提供。
-存档浏览、来源缓存和复杂演示见 [neomega-viewer](../../neomega-viewer/README.md)。
+存档浏览、来源缓存和复杂演示见 [neomega-viewer](../../apps/neomega-viewer/README.md)。
 
 ## 直接使用 Go 库
 

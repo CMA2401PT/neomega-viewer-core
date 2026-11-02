@@ -27,4 +27,4 @@ go run .
 
 打开 <http://127.0.0.1:2414>。附魔台沿屋前排列，陶罐沿屋子右侧排列。拖动旋转，滚轮缩放，右键拖动平移。需要其他端口时运行 `go run . -listen 127.0.0.1:2415`。前端源码变化后需重新运行 `npm run build`。
 
-贴图来源与许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2414/textures/THIRD_PARTY_NOTICES.txt) 和模块的 [NOTICE.md](../../../../neomega-viewer/NOTICE.md)。
+贴图来源与许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2414/textures/THIRD_PARTY_NOTICES.txt) 和模块的 [NOTICE.md](../../../../apps/neomega-viewer/NOTICE.md)。
