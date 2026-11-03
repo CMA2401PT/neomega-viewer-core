@@ -10,6 +10,7 @@ export type {
   FrameData,
   EffectMessage,
   BlockActor,
+  ActorTexture,
   Vec3,
   AlphaMode,
   FloatAttribute,
@@ -25,3 +26,7 @@ export type { FrameObject } from "./frame.ts";
 export { SurfaceMaterials } from "./materials.ts";
 export { SectionScene } from "./section-scene.ts";
 export type { SectionObject } from "./section-scene.ts";
+
+export { createActorObject } from "./actor.ts";
+
+export { enchantingTableBookTextureURL } from "./effects/book.ts";

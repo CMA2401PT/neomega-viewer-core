@@ -37,9 +37,17 @@ export interface EffectMessage {
   pos: Vec3;
   effect: string;
 }
+/** actor 私有的非预乘 RGBA8、sRGB 图片；name 对应该 actor 的 Surface.texture。 */
+export interface ActorTexture {
+  name: string;
+  width: number;
+  height: number;
+  pixels: Uint8Array;
+}
 export interface BlockActor {
   pos: Vec3;
   mesh: MeshData;
+  textures?: ActorTexture[];
 }
 export interface FrameData {
   mesh: MeshData;

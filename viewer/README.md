@@ -5,14 +5,14 @@ Go 负责网格构建及二进制编码，Web 包负责解码、材质、场景�
 方块实体 NBT 是附着于方块的结构化数据，例如陶罐四面的纹样。
 
 `geometry` 表达单个方块形状并解析 Java 模型，`resources` 分发预置几何和配套图集。
-资源生成由同模块的 `viewer-assets` 负责。
+公共几何与图集的生成由同模块的 `viewer-assets` 负责；特殊处理器的固定图片与其代码放在一起。
 `mesher` 按邻居覆盖剔面和合并，`dispatcher` 将普通方块、特效和依赖 NBT 的外观分别处理，再由 `merger` 编码成完整快照。
 渲染入口使用已经确定的 Java 状态，是否先调用 fixer 由外层应用决定。
 
 ## 最简示例
 
-从 [single_block](examples/single_block/README.md) 可以分别查看含水树叶、动画火焰、附魔台与纹样陶罐，每个场景只显示一个方块。
-需要多个方块时，[basic](examples/basic/README.md) 展示静态子区块，[spec_block](examples/spec_block/README.md) 展示附魔书与陶罐，[infinity](examples/infinity/README.md) 展示按需生成的无限世界。
+从 [single_block](examples/single_block/README.md) 可以分别查看含水树叶、动画火焰、附魔台、纹样陶罐与旗帜，每个场景只显示一个方块。
+需要多个方块时，[basic](examples/basic/README.md) 展示静态子区块，[spec_block](examples/spec_block/README.md) 展示附魔书、陶罐与旗帜，[infinity](examples/infinity/README.md) 展示按需生成的无限世界。
 它们直接连接 Go 与 Web 核心，HTTP 接口由各示例自行提供。
 存档浏览、来源缓存和复杂演示见 [neomega-viewer](../../apps/neomega-viewer/README.md)。
 
@@ -120,12 +120,13 @@ if err := result.Mesh.Marshal(writer); err != nil {
 - **effector 段**：特效消息，例如 `{pos: [3,1,3], effect: "enchanting_table_book"}`。本体照常在 mesher 段里，特效由前端程序驱动。
 - **block actor 段**：按 NBT 生成的几何，坐标已是子区块局部坐标。成功构建的 actor 替换该格的静态本体。
 
-默认组装 `NewJavaPipeline` 启用附魔台书本特效，并在提供图集时启用陶罐 actor。`tables` 来自几何表，`atlas` 是配套图集。`blocks` 是 `*blockdata.Blocks`，包含状态调色板和 N³ 个未压缩索引，实体来自已解码的 Java NBT：
+Java 的默认组合由 `javapreset.NewPipeline` 提供，启用附魔书、陶罐和旗帜。陶罐和旗帜在各自构造函数中读取内嵌 PNG，组装入口只需几何表和尺寸。通用 `dispatcher` 不依赖这些具体处理器。`blocks` 是 `*blockdata.Blocks`，包含状态调色板和 N³ 个未压缩索引，实体来自已解码的 Java NBT：
 
 ```go
 layout := cube.New(1)
 blocks := blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:enchanting_table []"))
-pipeline := dispatcher.NewJavaPipeline(layout, tables, atlas, nil)
+pipeline, err := javapreset.NewPipeline(layout, tables, nil)
+if err != nil { return err }
 result, err := pipeline.Build(
     dispatcher.Section{Blocks: blocks},
     dispatcher.Neighbours{},
@@ -149,9 +150,11 @@ if err := result.Frame.Marshal(writer); err != nil {
 应用层的 [frame 接口](../../apps/neomega-viewer/demo/httpapi/frame.go) 使用这条路径，场景配方中的 SNBT（NBT 的文本表示）由应用层解析成 Compound。
 纯 mesh 接口仍按前文的多层入口构建。
 
-需要缺失模型占位时，将独立的 `*blockgeometry.Shape` 传给 `NewJavaPipeline`。mesher 只在几何表没有对应键时引用它，有键但模型列表为空的状态仍视为有意无几何。中心与邻居使用相同的查表规则，只有中心格产生缺失记录。Pipeline 将多层缺失合并为每格一条 `MissingModel` 诊断。占位为 nil 时缺失 ID 返回错误。[存档浏览器](../../apps/neomega-viewer/cmd/world-viewer/mesh.go) 使用石头形状的洋红副本作为占位，最简示例使用 nil。
+需要缺失模型占位时，将独立的 `*blockgeometry.Shape` 传给 `javapreset.NewPipeline`。mesher 只在几何表没有对应键时引用它，有键但模型列表为空的状态仍视为有意无几何。中心与邻居使用相同的查表规则，只有中心格产生缺失记录。Pipeline 将多层缺失合并为每格一条 `MissingModel` 诊断。占位为 nil 时缺失 ID 返回错误。[存档浏览器](../../apps/neomega-viewer/cmd/world-viewer/mesh.go) 使用石头形状的洋红副本作为占位，最简示例使用 nil。
 
-新增一种 NBT 方块时，在 `blockactor/` 下新建子包，实现 `blockactor.Handler`，按完整状态和 Compound 返回格内几何，再通过 `NewPipeline(layout, tables, effects, actors, missing)` 组装。`blockactor.AtlasSurfaces` 负责将贴图名查成图集材质，`Dispatcher.BuildOne` 统一复制和平移单个 actor。陶罐的 NBT 结构与朝向见 [blockactor/decoratedpot/NBT.md](blockactor/decoratedpot/NBT.md)。
+新增一种 NBT 方块时，在 `blockactor/` 下新建子包，实现 `blockactor.Handler`，按完整状态和 Compound 返回 `Appearance`，即格内网格与可选私有 RGBA 图片。`blockactor.Dispatcher` 统一复制和平移网格，`javapreset` 负责注册具体处理器。陶罐和旗帜自行持有固定 PNG，并随网格交付所需像素；旗帜的图案先在 Go 合成。接口边界与后续告示牌的接入方式见 [blockactor 说明](blockactor/README.md)。
+
+NVFR v2 携带 actor 的私有图片，Go/TS 解码器仍可读取不含图片的 v1。升级服务时应同时更新前端绘制包。旗帜 NBT、支持范围和示例见 [旗帜说明](blockactor/banner/NBT.md)。
 
 ## 更新配套几何资源
 
@@ -161,7 +164,7 @@ if err := result.Frame.Marshal(writer); err != nil {
 go generate ./viewer/resources
 ```
 
-入口直接读取 `viewer-assets/dist/final`，同时更新几何、元数据、实心表与运行时贴图。
+入口直接读取 `viewer-assets/dist/final`，同时更新几何、元数据、实心表与公共图集。
 准备资源与验证建表的命令见 [生成器说明](../viewer-assets/cmd/build-tables/README.md)。
 几何中的 UV 与图集布局配套，更新后应重新构建使用这些资源的程序。
 
@@ -241,6 +244,7 @@ npm install /path/to/neomega-viewer-core/viewer/web three@0.186.1
 ```ts
 import {
   createEffectRegistry,
+  enchantingTableBookTextureURL,
   createFrameObject,
   decodeFrame,
   loadAtlas,
@@ -248,7 +252,7 @@ import {
 
 const [atlas, book] = await Promise.all([
   loadAtlas("/assets/atlas.png"),
-  loadAtlas("/assets/entity/enchanting_table_book.png"),
+  loadAtlas(enchantingTableBookTextureURL),
 ]);
 const registry = createEffectRegistry(book);
 const response = await fetch("/api/subchunks/block_entities/frame");
@@ -264,7 +268,7 @@ function render(timestamp: number): void {
 }
 ```
 
-对象退出场景时，先移除 `frame.object`，再调用 `frame.dispose()` 释放它的缓冲与材质。图集与书本贴图由宿主在所有使用者释放后统一销毁。需要支持其他特效时，在 `registry` 中注册对应工厂。
+对象退出场景时，先移除 `frame.object`，再调用 `frame.dispose()` 释放它的缓冲、材质及 actor 私有贴图。图集与书本贴图由宿主在所有使用者释放后统一销毁。需要支持其他特效时，在 `registry` 中注册对应工厂。
 
 希望一并复用相机、视口和动画驱动时，使用 `new MeshViewport(host, atlas, { effects: registry })` 创建视口，再调用其 `setFrame(data)` 显示快照。换一个快照会整体替换三部分内容。视口只在存在动画材质、特效或相机仍在移动时连续请求帧。
 
@@ -287,7 +291,8 @@ scene.add(mesh.object);
 ```ts
 import { createBatchObject, createEffectsObject } from "@neomega/viewer/render";
 
-const batches = [data.mesh, ...data.actors.map((actor) => actor.mesh)]
+// 这里只筛选使用公共图集的几何；私有贴图 actor 应交给 createActorObject。
+const batches = [data.mesh, ...data.actors.filter(actor => !actor.textures?.length).map(actor => actor.mesh)]
   .flatMap((mesh) => mesh.batches)
   .filter((batch) => batch.surface.mode === "blend");
 const transparent = createBatchObject(batches, atlas);
@@ -295,9 +300,11 @@ const effects = createEffectsObject(data.effects, registry);
 scene.add(transparent.object, effects.object);
 ```
 
-这两个入口返回统一的 `RenderObject`，可以像整帧对象一样更新时间和释放资源。批次对象从实际几何计算边界，特效对象的边界覆盖整个动画范围。宿主每帧向各对象传入同一个秒数。`animated` 可用于决定是否继续请求动画帧。
+`createActorObject(actor, atlas)` 会同时绑定 actor 的私有图片。不能把这种 actor 的 mesh 单独取出后绑定公共图集。
 
-需要同时显示一批 section 时，逐个创建整帧对象会增加绘制提交。`SectionScene` 按空间区域合批，并统一管理共享材质、两级可见性和遮挡查询。每个实例使用固定边长，构造函数第五个参数 `sectionSize` 默认为 16；使用其他 N 时由宿主在创建时指定。共享坐标类型 `SectionPos` 使用 section 坐标。帧内几何使用该 section 的局部坐标。
+这些入口返回统一的 `RenderObject`，可以像整帧对象一样更新时间和释放资源。批次对象从实际几何计算边界，特效对象的边界覆盖整个动画范围。宿主每帧向各对象传入同一个秒数。`animated` 可用于决定是否继续请求动画帧。
+
+需要同时显示一批 section 时，逐个创建整帧对象会增加绘制提交。`SectionScene` 按空间区域合批，并统一管理共享材质、两级可见性和遮挡查询。使用公共图集的 actor 参与合批，私有贴图 actor 保持独立材质并随区域卸载。每个实例使用固定边长，构造函数第五个参数 `sectionSize` 默认为 16；使用其他 N 时由宿主在创建时指定。共享坐标类型 `SectionPos` 使用 section 坐标。帧内几何使用该 section 的局部坐标。
 
 宿主先准备一组位置与 `FrameData`。下面的 `sections` 是宿主提供的位置与快照列表，可以一次挂载 Java 结构文件中的所有 section，也可以随着加载结果逐个加入：
 

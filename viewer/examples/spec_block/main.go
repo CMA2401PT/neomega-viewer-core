@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"flag"
-	"io/fs"
 	"log"
 	"net/http"
 
@@ -13,7 +11,7 @@ import (
 	"neomega-viewer-core/viewer/blockdata"
 	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/dispatcher"
-	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
+	"neomega-viewer-core/viewer/javapreset"
 	"neomega-viewer-core/viewer/merger"
 	preset "neomega-viewer-core/viewer/resources"
 )
@@ -31,19 +29,12 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// 陶罐 actor 按 NBT 选择纹样，需要与几何表配套的图集区域。
-	var atlasJSON []byte
-	atlasJSON, err = fs.ReadFile(preset.Resources(), "blocksAtlases.json")
+	// 2. Java 预设组装书本、陶罐和旗帜，处理器自行加载各自内嵌的图片。
+	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var atlas jmodel.Atlas
-	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
-		log.Fatal(err)
-	}
-	// 2. 组装完整渲染入口：普通网格、让网页创建书本的消息（effect）、按 NBT 生成的陶罐网格（actor）。
-	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
-	pipeline := dispatcher.NewJavaPipeline(layout, resources.Tables, &atlas, nil)
 	// 3. 每个请求顺序完成数据构造、网格生成与编码。
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/subchunk", func(w http.ResponseWriter, r *http.Request) {
@@ -152,5 +143,16 @@ func defaultSubchunk() dispatcher.Section {
 			},
 		}
 	}
+	// 两面旗帜使用相同的私有贴图名，却有独立底色和图案；与陶罐共享 actor 通道。
+	for i, color := range []string{"white", "yellow"} {
+		pos := dispatcher.CellPos{uint8(3 + 3*i), 1, 3}
+		set(int(pos[0]), int(pos[1]), int(pos[2]), ir.IRBlock("minecraft:"+color+`_banner ["rotation"="0"]`))
+		section.Entities[pos] = nbt.Compound{"patterns": []any{
+			map[string]any{"pattern": "minecraft:stripe_bottom", "color": "blue"},
+			map[string]any{"pattern": "minecraft:cross", "color": "red"},
+			map[string]any{"pattern": "minecraft:border", "color": "black"},
+		}}
+	}
+
 	return section
 }

@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"io/fs"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,8 +10,8 @@ import (
 	"neomega-viewer-core/viewer/blockdata"
 	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/dispatcher"
-	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
 	"neomega-viewer-core/viewer/geometry/material"
+	"neomega-viewer-core/viewer/javapreset"
 	preset "neomega-viewer-core/viewer/resources"
 )
 
@@ -23,15 +21,14 @@ func TestSingleBlockScenes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	atlasJSON, err := fs.ReadFile(preset.Resources(), "blocksAtlases.json")
+	pipeline, err := javapreset.NewPipeline(cube.New(1), resources.Tables, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var atlas jmodel.Atlas
-	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
+	paddedPipeline, err := javapreset.NewPipeline(cube.New(16), resources.Tables, nil)
+	if err != nil {
 		t.Fatal(err)
 	}
-	pipeline := dispatcher.NewJavaPipeline(cube.New(1), resources.Tables, &atlas, nil)
 	for _, name := range []string{"waterlogged_leaves", "fire", "enchanting_table", "decorated_pot"} {
 		t.Run(name, func(t *testing.T) {
 			scene := scenes[name]
@@ -53,7 +50,7 @@ func TestSingleBlockScenes(t *testing.T) {
 			// 与旧的 16³ 空气填充输入比较完整产物，保证尺寸变化不改变单格外观。
 			padded := blockdata.Uniform(4096, ir.IRBlock("minecraft:air []"))
 			padded.Set(0, scene.State.Tidy())
-			legacy, err := dispatcher.NewJavaPipeline(cube.New(16), resources.Tables, &atlas, nil).Build(
+			legacy, err := paddedPipeline.Build(
 				dispatcher.Section{Blocks: padded, Entities: map[dispatcher.CellPos]nbt.Compound{{}: scene.NBT}},
 				dispatcher.Neighbours{},
 				dispatcher.Options{},

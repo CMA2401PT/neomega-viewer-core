@@ -2,6 +2,9 @@ import * as THREE from "three";
 import type { EffectMessage, Vec3 } from "../types.ts";
 import type { EffectObject } from "./index.ts";
 
+/** 随绘制器交付的书本图片；打包器负责生成最终 URL，宿主负责加载和释放贴图。 */
+export const enchantingTableBookTextureURL: string = new URL("./enchanting_table_book.png", import.meta.url).href;
+
 /** BookModel 的 64×32 展开布局；模型像素换算为 1/16 格。 */
 export function createEnchantingTableBook(
   message: EffectMessage,

@@ -74,14 +74,13 @@ func generate(assetsDir, output, solidPath string) error {
 	return nil
 }
 
-// copyTextures 交付与几何表相同构建的图集，以及特殊方块运行时需要的贴图。
+// copyTextures 交付与几何表相同构建的图集与来源声明。
 func copyTextures(assetsDir, outputDir string) error {
-	for _, file := range [][2]string{
-		{"blocksAtlases.json", "blocksAtlases.json"},
+	files := [][2]string{
 		{"blocksAtlasLatest.png", "atlas.png"},
 		{"THIRD_PARTY_NOTICES.txt", "THIRD_PARTY_NOTICES.txt"},
-		{"../works/04-renderers/assets/minecraft/textures/entity/enchanting_table_book.png", "entity/enchanting_table_book.png"},
-	} {
+	}
+	for _, file := range files {
 		data, err := os.ReadFile(filepath.Join(assetsDir, file[0]))
 		if err != nil {
 			return err

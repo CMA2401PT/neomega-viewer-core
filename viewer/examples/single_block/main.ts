@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   createEffectRegistry,
+  enchantingTableBookTextureURL,
   createFrameObject,
   decodeFrame,
   loadAtlas,
@@ -13,12 +14,12 @@ async function main(): Promise<void> {
   const sceneName: string = new URLSearchParams(location.search).get("scene") ?? "waterlogged_leaves";
   // 1. 网格中的 UV 指向这张配套图集；贴图与 Go 使用的几何表来自同一份资源。
   const atlas: THREE.Texture = await loadAtlas("/textures/atlas.png");
-  // 书本是独立的动态几何，使用自己的贴图。
-  const book: THREE.Texture = await loadAtlas("/textures/entity/enchanting_table_book.png");
+  // 书本贴图随前端包交付，URL 由打包器生成；无需在 Go 注册资源路由。
+  const book: THREE.Texture = await loadAtlas(enchantingTableBookTextureURL);
   // 2. 请求 Go 生成的二进制结果，解码后创建可以加入 Three.js 场景的对象。
   const response: Response = await fetch(`/api/block?scene=${encodeURIComponent(sceneName)}`);
   if (!response.ok) throw new Error(await response.text());
-  // 四种场景共用同一条解码和绘制链路，网页无需区分方块类型。
+  // 所有场景共用解码和绘制链路；旗帜的私有贴图已由 Go 合成，网页不解释 NBT。
   const binary: ArrayBuffer = await response.arrayBuffer();
   const frameData: FrameData = decodeFrame(binary);
   // registry 把 Go 发来的 effect 名称映射到书本绘制器；actor 已经是网格。

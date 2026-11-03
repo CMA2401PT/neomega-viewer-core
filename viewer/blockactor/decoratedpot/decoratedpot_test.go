@@ -12,7 +12,6 @@ import (
 	"neomega-viewer-core/viewer/blockactor/decoratedpot"
 	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
-	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher"
 	"neomega-viewer-core/viewer/mesher/geometry"
 	resources "neomega-viewer-core/viewer/resources"
@@ -31,10 +30,10 @@ func TestDecoratedPot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	surface := func(name string) (material.Surface, error) {
-		return material.Surface{Texture: name, Region: [4]float32{.25, .5, .125, .125}, Mode: material.Opaque, Opacity: 1, Frames: 1}, nil
+	handler, err := decoratedpot.New(tables)
+	if err != nil {
+		t.Fatal(err)
 	}
-	handler := decoratedpot.New(tables, surface)
 	actors := blockactor.New(handler)
 	for _, test := range []struct {
 		facing string
@@ -53,6 +52,25 @@ func TestDecoratedPot(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			// 所有面都必须由返回的图片覆盖，不能偷偷退回公共图集。
+			images := make(map[string]blockactor.Texture)
+			for _, image := range mesh.Textures {
+				if len(image.Pixels) != int(image.Width*image.Height*4) || len(image.Pixels) == 0 {
+					t.Fatal("陶罐图片像素不完整")
+				}
+				if _, duplicate := images[image.Name]; duplicate {
+					t.Fatal("同一图片重复交付")
+				}
+				images[image.Name] = image
+			}
+			for _, quad := range mesh.Mesh.Quads {
+				if _, found := images[quad.Surface.Texture]; !found {
+					t.Fatalf("%s 仍依赖公共图集", quad.Surface.Texture)
+				}
+				if quad.Surface.Region != ([4]float32{0, 0, 1, 1}) {
+					t.Fatal("残留图集区域")
+				}
+			}
 			input.NBT = decodedNBT(t, compoundNBT)
 			compound, err := handler.Build(input)
 			if err != nil || !reflect.DeepEqual(mesh, compound) {
@@ -64,10 +82,10 @@ func TestDecoratedPot(t *testing.T) {
 			}
 			patterns := []string{"angler", "archer", "arms_up", "prize"}
 			seen := [4]int{}
-			for i, quad := range mesh.Quads {
+			for i, quad := range mesh.Mesh.Quads {
 				if !strings.HasSuffix(quad.Surface.Texture, "_pottery_pattern") {
-					if quad != static.Quads[i] {
-						t.Fatal("base geometry or material changed")
+					if quad.Positions != static.Quads[i].Positions || quad.UV != static.Quads[i].UV {
+						t.Fatal("base geometry or UV changed")
 					}
 					continue
 				}
@@ -81,8 +99,8 @@ func TestDecoratedPot(t *testing.T) {
 							t.Fatalf("%s normal=%v, want %v", pattern, quad.Normal, test.normals[side])
 						}
 					}
-					if quad.UV != ([4]geometry.Vec2{{1.0 / 16, 0}, {1.0 / 16, 1}, {15.0 / 16, 1}, {15.0 / 16, 0}}) || quad.Surface.Region != ([4]float32{.25, .5, .125, .125}) {
-						t.Fatal("pattern UV or injected atlas region differs")
+					if quad.UV != ([4]geometry.Vec2{{1.0 / 16, 0}, {1.0 / 16, 1}, {15.0 / 16, 1}, {15.0 / 16, 0}}) || quad.Surface.Region != ([4]float32{0, 0, 1, 1}) {
+						t.Fatal("pattern UV or private image region differs")
 					}
 					if quad.Positions != static.Quads[i].Positions {
 						t.Fatal("side geometry changed")
@@ -117,7 +135,7 @@ func TestDecoratedPot(t *testing.T) {
 			t.Fatal(err)
 		}
 		sides := 0
-		for _, quad := range mesh.Quads {
+		for _, quad := range mesh.Mesh.Quads {
 			if strings.HasSuffix(quad.Surface.Texture, "/decorated_pot_side") {
 				sides++
 			}

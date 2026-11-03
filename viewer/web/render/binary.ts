@@ -1,5 +1,6 @@
 import type {
   Batch,
+  ActorTexture,
   BlockActor,
   EffectMessage,
   FrameData,
@@ -115,7 +116,8 @@ export function decodeFrame(buffer: ArrayBuffer): FrameData {
     buffer.byteLength < 48 ||
     text.decode(new Uint8Array(buffer, 0, 4)) !== "NVFR"
   ) throw new Error("无效的 NVFR 快照文件");
-  if (view.getUint32(4, true) !== 1) throw new Error("不支持的 NVFR 版本");
+  const version = view.getUint32(4, true);
+  if (version !== 1 && version !== 2) throw new Error("不支持的 NVFR 版本");
   if (view.getUint32(8, true) !== 3) throw new Error("NVFR 段数不符");
   const sections = new Map<number, { offset: number; length: number }>();
   for (let i = 0; i < 3; i++) {
@@ -141,12 +143,31 @@ export function decodeFrame(buffer: ArrayBuffer): FrameData {
     offset += 8;
     // 子载荷不能越过 actor 段；不复制顶点缓冲。
     if (offset + length > actors.length) throw new Error("actor 网格不完整");
-    result.push({
-      pos,
-      mesh: decodeMeshRange(buffer, actors.offset + offset, length),
-    });
+    const mesh = decodeMeshRange(buffer, actors.offset + offset, length);
     offset += length;
+    const textures: ActorTexture[] = [];
+    if (version === 2) {
+      const count = actorView.getUint32(offset, true);
+      offset += 4;
+      for (let t = 0; t < count; t++) {
+        const nameLength = actorView.getUint32(offset, true);
+        const width = actorView.getUint32(offset + 4, true);
+        const height = actorView.getUint32(offset + 8, true);
+        offset += 12;
+        const paddedName = Math.ceil(nameLength / 4) * 4;
+        const pixelsLength = width * height * 4;
+        if (offset + paddedName + pixelsLength > actors.length) throw new Error("actor 贴图不完整");
+        const name = text.decode(new Uint8Array(buffer, actors.offset + offset, nameLength));
+        offset += paddedName;
+        // 上传 GPU 前复制的职责留给绘制对象；解码仍与网格一样借用响应缓冲。
+        const pixels = new Uint8Array(buffer, actors.offset + offset, pixelsLength);
+        offset += pixelsLength;
+        textures.push({ name, width, height, pixels });
+      }
+    }
+    result.push({ pos, mesh, textures });
   }
+  if (offset !== actors.length) throw new Error("actor 段长度不符");
   return {
     mesh: decodeMeshRange(buffer, mesh.offset, mesh.length),
     effects: JSON.parse(

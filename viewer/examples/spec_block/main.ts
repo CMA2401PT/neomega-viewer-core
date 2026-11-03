@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import {
   createEffectRegistry,
+  enchantingTableBookTextureURL,
   createFrameObject,
   decodeFrame,
   loadAtlas,
@@ -12,8 +13,8 @@ import {
 async function main(): Promise<void> {
   // 1. 网格中的 UV 指向这张配套图集；贴图与 Go 使用的几何表来自同一份资源。
   const atlas: THREE.Texture = await loadAtlas("/textures/atlas.png");
-  // 书本是独立的动态几何，使用自己的贴图。
-  const book: THREE.Texture = await loadAtlas("/textures/entity/enchanting_table_book.png");
+  // 书本贴图随前端包交付，URL 由打包器生成；无需在 Go 注册资源路由。
+  const book: THREE.Texture = await loadAtlas(enchantingTableBookTextureURL);
   // 2. 请求 Go 生成的二进制结果，解码后创建可以加入 Three.js 场景的对象。
   const response: Response = await fetch("/api/subchunk?subchunk=default");
   if (!response.ok) throw new Error(await response.text());

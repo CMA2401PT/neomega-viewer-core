@@ -2,9 +2,7 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"flag"
-	"io/fs"
 	"log"
 	"net/http"
 
@@ -13,7 +11,7 @@ import (
 	"neomega-viewer-core/viewer/blockdata"
 	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/dispatcher"
-	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
+	"neomega-viewer-core/viewer/javapreset"
 	"neomega-viewer-core/viewer/merger"
 	preset "neomega-viewer-core/viewer/resources"
 )
@@ -28,20 +26,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// 陶罐需要配套图集的区域信息，才能按 NBT 选择四面的纹样。
-	var atlasJSON []byte
-	atlasJSON, err = fs.ReadFile(preset.Resources(), "blocksAtlases.json")
+	// 2. 固定处理 1³；Java 预设加载配套贴图并组装书本、陶罐和旗帜处理器。
+	layout := cube.New(1)
+	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var atlas jmodel.Atlas
-	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
-		log.Fatal(err)
-	}
-	// 2. 构建器固定为 1³；除了普通网格和含水拆层，还生成书本消息（effect）与陶罐网格（actor）。
-	layout := cube.New(1)
-	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
-	pipeline := dispatcher.NewJavaPipeline(layout, resources.Tables, &atlas, nil)
 	// 3. 每个请求顺序完成数据构造、网格生成与编码。
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/block", func(w http.ResponseWriter, r *http.Request) {
@@ -90,7 +81,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(*listen, mux))
 }
 
-// 每个场景只有一个完整 Java 状态；只有陶罐需要额外的实体 NBT。
+// 每个场景只有一个完整 Java 状态；陶罐与旗帜通过实体 NBT 指定纹样。
 var scenes = map[string]struct {
 	State ir.IRBlock
 	NBT   nbt.Compound
@@ -103,6 +94,21 @@ var scenes = map[string]struct {
 	},
 	"enchanting_table": {
 		State: ir.IRBlock("minecraft:enchanting_table []"),
+	},
+	"banner": {
+		State: ir.IRBlock(`minecraft:white_banner ["rotation"="0"]`),
+		NBT: nbt.Compound{"patterns": []any{
+			map[string]any{"pattern": "minecraft:stripe_bottom", "color": "blue"},
+			map[string]any{"pattern": "minecraft:cross", "color": "red"},
+			map[string]any{"pattern": "minecraft:border", "color": "black"},
+		}},
+	},
+	"wall_banner": {
+		State: ir.IRBlock(`minecraft:yellow_wall_banner ["facing"="east"]`),
+		NBT: nbt.Compound{"patterns": []any{
+			map[string]any{"pattern": "minecraft:gradient", "color": "red"},
+			map[string]any{"pattern": "minecraft:flower", "color": "white"},
+		}},
 	},
 	"decorated_pot": {
 		State: ir.IRBlock(`minecraft:decorated_pot ["cracked"="false","facing"="north","waterlogged"="false"]`),

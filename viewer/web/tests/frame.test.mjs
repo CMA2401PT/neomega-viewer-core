@@ -47,7 +47,7 @@ test("NVFR uses directory types and bounded NVMS payloads", () => {
   assert.equal(decodeFrame(buffer).actors.length, 6);
   assert.throws(() => decodeFrame(buffer.slice(0, buffer.byteLength - 4)));
   const wrongVersion = fixture();
-  new DataView(wrongVersion).setUint32(4, 2, true);
+  new DataView(wrongVersion).setUint32(4, 99, true);
   assert.throws(() => decodeFrame(wrongVersion), /NVFR 版本/);
   const extraMeshBytes = fixture();
   const view = new DataView(extraMeshBytes);

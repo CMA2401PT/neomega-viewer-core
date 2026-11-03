@@ -1,12 +1,8 @@
 package blockactor
 
 import (
-	"fmt"
-
 	"neomega-blocks/ir"
 	nbt "neomega-nbt/presets/v1"
-	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
-	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher/geometry"
 )
 
@@ -17,16 +13,33 @@ type Input struct {
 	Waterlogged bool
 }
 
-type Actor struct {
-	// Pos 只标记归属，Mesh 顶点已经位于子区块局部坐标。
-	Pos  [3]uint8
-	Mesh geometry.Mesh
+// Texture 是处理器生成的私有贴图：从左上角逐行排列的非预乘 RGBA8、sRGB 像素。
+// Name 与本 actor 的 Surface.Texture 对应，Region 相对这张图片；不会覆盖其他 actor 的同名贴图。
+type Texture struct {
+	Name          string
+	Width, Height uint32
+	Pixels        []byte
 }
 
+// Appearance 是格内完整外观；处理器负责状态旋转，通用分发器负责格子平移。
+// 没有私有贴图的材质继续使用共享图集，输出在使用期间视为只读。
+type Appearance struct {
+	Mesh     geometry.Mesh
+	Textures []Texture
+}
+
+type Actor struct {
+	// Pos 只标记归属，Mesh 顶点已经位于子区块局部坐标。
+	Pos      [3]uint8
+	Mesh     geometry.Mesh
+	Textures []Texture
+}
+
+// Handler 把支持的方块状态与 NBT 烘焙为完整外观，具体方块知识止于此接口。
 type Handler interface {
-	// 处理器返回按状态旋转的格内几何，格子平移统一由 Dispatcher 执行。
 	BlockNames() []string
-	Build(input Input) (geometry.Mesh, error)
+	// Build 返回按状态旋转的格内网格与可选图片；格子平移统一由 Dispatcher 执行。
+	Build(input Input) (Appearance, error)
 }
 
 type Dispatcher struct {
@@ -65,11 +78,11 @@ func (d *Dispatcher) Build(inputs []Input) ([]Actor, error) {
 
 func (d *Dispatcher) BuildOne(input Input) (Actor, error) {
 	// 复制后平移一次，处理器可以返回共享的格内模型。
-	mesh, err := d.handlers[input.State.NameWithNameSpace()].Build(input)
+	appearance, err := d.handlers[input.State.NameWithNameSpace()].Build(input)
 	if err != nil {
 		return Actor{}, err
 	}
-	placed := geometry.Mesh{Quads: append([]geometry.Quad(nil), mesh.Quads...)}
+	placed := geometry.Mesh{Quads: append([]geometry.Quad(nil), appearance.Mesh.Quads...)}
 	for i := range placed.Quads {
 		for j := range placed.Quads[i].Positions {
 			for axis, offset := range input.Pos {
@@ -77,31 +90,5 @@ func (d *Dispatcher) BuildOne(input Input) (Actor, error) {
 			}
 		}
 	}
-	return Actor{Pos: input.Pos, Mesh: placed}, nil
-}
-
-// 贴图名带 minecraft: 命名空间，查询结果包含配套图集区域和材质属性。
-type SurfaceLookup func(texture string) (material.Surface, error)
-
-func AtlasSurfaces(atlas *jmodel.Atlas) SurfaceLookup {
-	// actor 与静态模型使用配套图集，统一保留区域与动画参数。
-	return func(texture string) (material.Surface, error) {
-		entry, found := atlas.Textures[jmodel.ResourceID(texture)]
-		if !found {
-			return material.Surface{}, fmt.Errorf("missing actor texture %s", texture)
-		}
-		return material.Surface{
-			Texture: texture,
-			Region: [4]float32{
-				float32(entry.U),
-				float32(entry.V),
-				float32(entry.SU),
-				float32(entry.SV),
-			},
-			Mode:      material.Opaque,
-			Opacity:   1,
-			Frames:    entry.Frames,
-			FrameTime: entry.FrameTime,
-		}, nil
-	}
+	return Actor{Pos: input.Pos, Mesh: placed, Textures: appearance.Textures}, nil
 }

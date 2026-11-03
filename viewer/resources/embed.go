@@ -14,7 +14,7 @@ var Files embed.FS
 //go:embed textures
 var textures embed.FS
 
-// Resources 返回与预置几何匹配的贴图、图集区域和来源声明。
+// Resources 返回与预置几何匹配的公共图集和来源声明。
 func Resources() fs.FS {
 	files, _ := fs.Sub(textures, "textures")
 	return files

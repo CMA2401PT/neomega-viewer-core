@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createActorObject } from "./actor.ts";
 import { createBatchObject, type MeshOptions } from "./mesh.ts";
 import { createEffectsObject, type EffectRegistry } from "./effects/index.ts";
 import type { RenderObject } from "./object.ts";
@@ -15,17 +16,11 @@ export function createFrameObject(
 ): FrameObject {
   const object = new THREE.Group();
   const bounds = new THREE.Box3();
-  const meshes = [data.mesh, ...data.actors.map((actor) => actor.mesh)].map(
-    (mesh) => {
-      if (mesh.quads > 0) {
-        bounds.union(new THREE.Box3(
-          new THREE.Vector3(...mesh.bounds.min),
-          new THREE.Vector3(...mesh.bounds.max),
-        ));
-      }
-      return createBatchObject(mesh.batches, atlas, options);
-    },
-  );
+  const meshes = [
+    createBatchObject(data.mesh.batches, atlas, options),
+    ...data.actors.map(actor => createActorObject(actor, atlas, options)),
+  ];
+  for (const mesh of meshes) bounds.union(mesh.bounds);
   const effects = createEffectsObject(data.effects, registry);
   bounds.union(effects.bounds);
   for (const mesh of meshes) object.add(mesh.object);

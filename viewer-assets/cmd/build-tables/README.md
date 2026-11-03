@@ -12,7 +12,8 @@
 
 默认输入是 `viewer-assets/dist/final` 中的 `blockstates.json`、`models.json`、`blocksAtlases.json`、`blocksAtlasLatest.png`、`blockRenderers.json` 和 `build-info.json`。
 状态版本与资源版本必须一致。
-贴图交付还读取该目录的 `THIRD_PARTY_NOTICES.txt`，以及相邻 `dist/works/04-renderers/assets/minecraft/textures/entity/enchanting_table_book.png`。
+贴图交付只复制该目录的公共图集和 `THIRD_PARTY_NOTICES.txt`。图集坐标已经烘焙进几何表，无需另外交付坐标 JSON。
+旗帜、陶罐和附魔书的固定图片随各自处理器源码维护，不属于此生成器的输出。
 
 模型选择固定使用每组首个候选，满足条件的 multipart 部件全部保留。
 同一状态的部件先合并，再判断各面是否被不透明矩形完整覆盖。

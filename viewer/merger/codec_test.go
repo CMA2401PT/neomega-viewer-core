@@ -28,7 +28,10 @@ func TestRoundTripAndAlignment(t *testing.T) {
 				{Pos: [3]uint8{1, 2, 3}, Effect: "enchanting_table_book"},
 			},
 			Actors: []blockactor.Actor{
-				{Pos: [3]uint8{4, 5, 6}, Mesh: mesh},
+				{Pos: [3]uint8{4, 5, 6}, Mesh: mesh, Textures: []blockactor.Texture{
+					{Name: "test", Width: 2, Height: 1, Pixels: []byte{255, 0, 0, 255, 0, 0, 255, 128}},
+					{Name: "second", Width: 1, Height: 1, Pixels: []byte{0, 255, 0, 255}},
+				}},
 				{Pos: [3]uint8{7, 8, 9}, Mesh: mesh},
 			},
 		},

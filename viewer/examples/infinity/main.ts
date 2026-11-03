@@ -3,6 +3,7 @@ import {
   AxisGizmo,
   SectionScene,
   createEffectRegistry,
+  enchantingTableBookTextureURL,
   loadAtlas,
 } from "@neomega/viewer/render";
 import { FlightControls } from "./flight.ts";
@@ -11,8 +12,8 @@ import { SECTION_SIZE, SectionLoader } from "./stream.ts";
 async function main(): Promise<void> {
   // 1. 网格中的 UV 指向这张配套图集；贴图与 Go 使用的几何表来自同一份资源。
   const atlas: THREE.Texture = await loadAtlas("/textures/atlas.png");
-  // 书本是独立的动态几何，使用自己的贴图。
-  const book: THREE.Texture = await loadAtlas("/textures/entity/enchanting_table_book.png");
+  // 书本贴图随前端包交付，URL 由打包器生成；无需在 Go 注册资源路由。
+  const book: THREE.Texture = await loadAtlas(enchantingTableBookTextureURL);
   // 2. 设置自由飞行视角；雾在加载范围边缘变浓，避免远处区域突然出现。
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0xd9e5ed);

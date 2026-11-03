@@ -2,16 +2,13 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"io/fs"
 	"reflect"
 	"strings"
 	"testing"
 
 	"neomega-viewer-core/viewer/dispatcher"
-	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
+	"neomega-viewer-core/viewer/javapreset"
 	preset "neomega-viewer-core/viewer/resources"
-	viewassets "neomega-viewer-core/viewer/resources"
 )
 
 // 验证正负坐标重建一致，且真实资源能生成纹样陶罐和动态书本消息。
@@ -20,15 +17,10 @@ func TestGeneratedWorld(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	atlasJSON, err := fs.ReadFile(viewassets.Resources(), "blocksAtlases.json")
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var atlas jmodel.Atlas
-	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
-		t.Fatal(err)
-	}
-	pipeline := dispatcher.NewJavaPipeline(layout, resources.Tables, &atlas, nil)
 	world := generatedWorld{}
 	for _, pos := range []dispatcher.SectionPos{{}, {X: -1, Z: -1}, {X: 12345, Z: -789}} {
 		first, err := world.Section(t.Context(), pos)

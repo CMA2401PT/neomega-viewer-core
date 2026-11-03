@@ -2,15 +2,13 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"flag"
-	"io/fs"
 	"log"
 	"net/http"
 	"strconv"
 
 	"neomega-viewer-core/viewer/dispatcher"
-	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
+	"neomega-viewer-core/viewer/javapreset"
 	"neomega-viewer-core/viewer/merger"
 	preset "neomega-viewer-core/viewer/resources"
 )
@@ -25,20 +23,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// JSON 记录纹样在图集中的区域；PNG 图片由网页加载，两者必须与几何表配套。
-	var atlasJSON []byte
-	atlasJSON, err = fs.ReadFile(preset.Resources(), "blocksAtlases.json")
+	// 2. Java 预设组装书本、陶罐和旗帜，处理器自行加载各自内嵌的图片。
+	// layout 在 world.go 中固定为 cube.New(16)，数据来源和构建器共用它。
+	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	var atlas jmodel.Atlas
-	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
-		log.Fatal(err)
-	}
-	// 2. 组装完整渲染入口：普通网格、让网页创建书本的消息（effect）、按 NBT 生成的陶罐网格（actor）。
-	// layout 在 world.go 中固定为 cube.New(16)，数据来源和构建器共用它。
-	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
-	pipeline := dispatcher.NewJavaPipeline(layout, resources.Tables, &atlas, nil)
 	// 3. 每个请求顺序完成数据构造、网格生成与编码。
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/section", func(w http.ResponseWriter, r *http.Request) {

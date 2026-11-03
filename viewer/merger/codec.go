@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 
 	"neomega-viewer-core/viewer/blockactor"
@@ -11,7 +12,7 @@ import (
 	"neomega-viewer-core/viewer/mesher/geometry"
 )
 
-const Version uint32 = 1
+const Version uint32 = 2
 const ContentType = "application/vnd.neomega.frame"
 
 type Frame struct {
@@ -64,6 +65,15 @@ func (frame Frame) Marshal(w io.Writer) error {
 		actorWriter.write(uint8(0))
 		actorWriter.write(uint32(payload.Len()))
 		actorWriter.write(payload.Bytes())
+		actorWriter.write(uint32(len(actor.Textures)))
+		for _, texture := range actor.Textures {
+			actorWriter.write(uint32(len(texture.Name)))
+			actorWriter.write(texture.Width)
+			actorWriter.write(texture.Height)
+			actorWriter.write([]byte(texture.Name))
+			actorWriter.write(make([]byte, align(uint32(len(texture.Name)))-uint32(len(texture.Name))))
+			actorWriter.write(texture.Pixels)
+		}
 	}
 	if actorWriter.err != nil {
 		return actorWriter.err
@@ -97,6 +107,9 @@ func Unmarshal(r io.Reader) (Frame, error) {
 	if err := binary.Read(input, binary.LittleEndian, &head); err != nil {
 		return frame, err
 	}
+	if head.Magic != [4]byte{'N', 'V', 'F', 'R'} || (head.Version != 1 && head.Version != Version) {
+		return frame, fmt.Errorf("不支持的 NVFR 标识或版本")
+	}
 	directory := make([]section, head.Sections)
 	if err := binary.Read(input, binary.LittleEndian, directory); err != nil {
 		return frame, err
@@ -109,7 +122,7 @@ func Unmarshal(r io.Reader) (Frame, error) {
 		case effectSection:
 			err = json.NewDecoder(payload).Decode(&frame.Effects)
 		case actorSection:
-			frame.Actors, err = readActors(payload)
+			frame.Actors, err = readActors(payload, head.Version)
 		}
 		if err != nil {
 			return frame, err
@@ -118,10 +131,18 @@ func Unmarshal(r io.Reader) (Frame, error) {
 	return frame, nil
 }
 
-func readActors(r io.Reader) ([]blockactor.Actor, error) {
+func readActors(source io.Reader, version uint32) ([]blockactor.Actor, error) {
+	data, err := io.ReadAll(source)
+	if err != nil {
+		return nil, err
+	}
+	r := bytes.NewReader(data)
 	var count uint32
 	if err := binary.Read(r, binary.LittleEndian, &count); err != nil {
 		return nil, err
+	}
+	if uint64(count)*8 > uint64(r.Len()) {
+		return nil, io.ErrUnexpectedEOF
 	}
 	actors := make([]blockactor.Actor, count)
 	for i := range actors {
@@ -138,6 +159,37 @@ func readActors(r io.Reader) ([]blockactor.Actor, error) {
 			return nil, err
 		}
 		actors[i] = blockactor.Actor{Pos: record.Pos, Mesh: mesh}
+		if version == 1 {
+			continue
+		} // 已保存的 v1 快照没有私有贴图。
+		var textureCount uint32
+		if err := binary.Read(r, binary.LittleEndian, &textureCount); err != nil {
+			return nil, err
+		}
+		for range textureCount {
+			var info struct{ NameLength, Width, Height uint32 }
+			if err := binary.Read(r, binary.LittleEndian, &info); err != nil {
+				return nil, err
+			}
+			pixelCount := uint64(info.Width) * uint64(info.Height)
+			if pixelCount > uint64(r.Len())/4 {
+				return nil, io.ErrUnexpectedEOF
+			}
+			pixels := pixelCount * 4
+			nameBytes := uint64(info.NameLength) + uint64((4-info.NameLength%4)%4)
+			if pixels > uint64(r.Len()) || nameBytes > uint64(r.Len())-pixels {
+				return nil, io.ErrUnexpectedEOF
+			}
+			name := make([]byte, int(nameBytes))
+			if _, err := io.ReadFull(r, name); err != nil {
+				return nil, err
+			}
+			texture := blockactor.Texture{Name: string(name[:info.NameLength]), Width: info.Width, Height: info.Height, Pixels: make([]byte, int(pixels))}
+			if _, err := io.ReadFull(r, texture.Pixels); err != nil {
+				return nil, err
+			}
+			actors[i].Textures = append(actors[i].Textures, texture)
+		}
 	}
 	return actors, nil
 }

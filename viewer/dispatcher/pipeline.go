@@ -7,12 +7,10 @@ import (
 	"neomega-blocks/ir"
 	nbt "neomega-nbt/presets/v1"
 	"neomega-viewer-core/viewer/blockactor"
-	"neomega-viewer-core/viewer/blockactor/decoratedpot"
 	"neomega-viewer-core/viewer/blockdata"
 	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/effector"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
-	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
 	"neomega-viewer-core/viewer/merger"
 	"neomega-viewer-core/viewer/mesher"
 	"neomega-viewer-core/viewer/splitlayer"
@@ -92,27 +90,6 @@ func NewPipeline(
 		p.actorNames[name] = true
 	}
 	return p
-}
-
-// NewJavaPipeline 使用指定布局组装 Java 方块、附魔书和可选的陶罐外观。
-func NewJavaPipeline(
-	layout cube.Layout,
-	tables *blockgeometry.Tables[uint32],
-	atlas *jmodel.Atlas,
-	missing *blockgeometry.Shape,
-) *Pipeline {
-	// 共享应用默认启用的特效和 actor；陶罐换纹样需要配套图集。
-	actors := blockactor.New()
-	if atlas != nil {
-		actors = blockactor.New(decoratedpot.New(tables, blockactor.AtlasSurfaces(atlas)))
-	}
-	return NewPipeline(
-		layout,
-		tables,
-		effector.New(map[string]string{"minecraft:enchanting_table": "enchanting_table_book"}),
-		actors,
-		missing,
-	)
 }
 
 type prepared struct {

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { createActorObject } from "./actor.ts";
 import { createBatchObject } from "./mesh.ts";
 import { createEffectsObject, type EffectRegistry } from "./effects/index.ts";
 import { SurfaceMaterials } from "./materials.ts";
@@ -190,7 +191,9 @@ export class SectionScene {
       },
     };
     if (!data) return section;
-    const meshes = [data.mesh, ...data.actors.map((actor) => actor.mesh)];
+    // 图集 actor 仍参与区域合批；含私有贴图的 actor 保留自己的材质与释放边界。
+    const texturedActors = data.actors.filter(actor => actor.textures?.length);
+    const meshes = [data.mesh, ...data.actors.filter(actor => !actor.textures?.length).map(actor => actor.mesh)];
     for (const mesh of meshes) {
       if (!mesh.quads) continue;
       section.bounds.union(new THREE.Box3(
@@ -206,7 +209,7 @@ export class SectionScene {
       });
     }
     const transparent = batches.filter((batch) => batch.surface.mode === "blend");
-    if (transparent.length || data.effects.length) {
+    if (transparent.length || data.effects.length || texturedActors.length) {
       const mesh = createBatchObject(
         transparent,
         this.atlas,
@@ -218,19 +221,34 @@ export class SectionScene {
       );
       const effects = createEffectsObject(data.effects, this.effects);
       for (const effect of [...effects.object.children]) mesh.object.add(effect);
+      const actors = texturedActors.map(actor => createActorObject(actor, this.atlas, {
+        materials: this.materials,
+        batchOpaqueSurfaces: true,
+        copyBuffers: true,
+        sortTransparentQuads: false,
+      }));
       const bounds = mesh.bounds.clone().union(effects.bounds);
+      for (const actor of actors) {
+        mesh.object.add(actor.object);
+        bounds.union(actor.bounds);
+      }
+      for (const actor of texturedActors) {
+        for (const texture of actor.textures!) section.bytes += texture.pixels.byteLength * 2;
+      }
       if (bounds.isEmpty()) bounds.set(new THREE.Vector3(), new THREE.Vector3(1, 1, 1));
       section.frame = {
         object: mesh.object,
         bounds,
-        animated: mesh.animated || effects.animated,
+        animated: mesh.animated || effects.animated || actors.some(actor => actor.animated),
         updateTime(seconds: number) {
           mesh.updateTime(seconds);
           effects.updateTime(seconds);
+          for (const actor of actors) actor.updateTime(seconds);
         },
         dispose() {
           mesh.dispose();
           effects.dispose();
+          for (const actor of actors) actor.dispose();
         },
       };
       section.bounds.union(section.frame.bounds);

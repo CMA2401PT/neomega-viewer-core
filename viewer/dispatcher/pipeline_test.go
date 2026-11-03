@@ -43,12 +43,12 @@ func (h *actorHandler) BlockNames() []string {
 	}
 	return []string{"minecraft:decorated_pot"}
 }
-func (h *actorHandler) Build(input blockactor.Input) (geometry.Mesh, error) {
+func (h *actorHandler) Build(input blockactor.Input) (blockactor.Appearance, error) {
 	h.inputs = append(h.inputs, input)
 	if input.NBT["fail"] == true {
-		return geometry.Mesh{}, errors.New("appearance failed")
+		return blockactor.Appearance{}, errors.New("appearance failed")
 	}
-	return geometry.Mesh{Quads: []geometry.Quad{{Positions: [4]geometry.Vec3{{0, 0, 0}}}}}, nil
+	return blockactor.Appearance{Mesh: geometry.Mesh{Quads: []geometry.Quad{{Positions: [4]geometry.Vec3{{0, 0, 0}}}}}}, nil
 }
 
 func TestWaterloggedActorAndEffect(t *testing.T) {
@@ -107,9 +107,9 @@ func TestWaterloggedActorAndEffect(t *testing.T) {
 
 func TestMissingDiagnosticsPreserveState(t *testing.T) {
 	missing := &blockgeometry.Shape{Quads: []geometry.Quad{{Color: [3]float32{1, 0, 1}}}}
-	pipeline := dispatcher.NewJavaPipeline(cube.New(16), &blockgeometry.Tables[uint32]{
+	pipeline := dispatcher.NewPipeline(cube.New(16), &blockgeometry.Tables[uint32]{
 		Index: map[uint32][]blockgeometry.ModelID{ir.IRBlock("minecraft:air []").Hash(): {}},
-	}, nil, missing)
+	}, effector.New(nil), blockactor.New(), missing)
 	input := section()
 	state := ir.IRBlock(`example:unknown ["waterlogged"="true"]`)
 	input.Blocks.Set(cube.New(16).Index(4, 5, 6), state)
@@ -123,7 +123,7 @@ func TestMissingDiagnosticsPreserveState(t *testing.T) {
 	if result.Diagnostics[0] != want {
 		t.Fatal(result.Diagnostics)
 	}
-	strict := dispatcher.NewJavaPipeline(cube.New(16), tables(t), nil, nil)
+	strict := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(), nil)
 	if _, err := strict.Build(input, dispatcher.Neighbours{}, dispatcher.Options{}); err == nil {
 		t.Fatal("missing shape nil did not return error")
 	}
@@ -141,7 +141,7 @@ func (s *source) Section(ctx context.Context, pos dispatcher.SectionPos) (*dispa
 }
 
 func TestBuildSectionsCachesNeighbours(t *testing.T) {
-	pipeline := dispatcher.NewJavaPipeline(cube.New(16), tables(t), nil, nil)
+	pipeline := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(), nil)
 	s := &source{
 		sections: map[dispatcher.SectionPos]*dispatcher.Section{},
 		calls:    map[dispatcher.SectionPos]int{},
