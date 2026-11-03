@@ -1,3 +1,4 @@
+// 在本目录运行 npm ci、npm run build、go run .，再打开 http://127.0.0.1:2413。
 package main
 
 import (
@@ -14,7 +15,7 @@ import (
 )
 
 // 示例中的所有输入共用这一个 16³ 坐标约定。
-var layout = cube.New(16)
+var layout cube.Layout = cube.New(16)
 
 func main() {
 	var listen *string = flag.String("listen", "127.0.0.1:2413", "HTTP 监听地址")
@@ -27,7 +28,7 @@ func main() {
 		log.Fatal(err)
 	}
 	// 2. 本例只有单层普通方块，直接构建网格；含水、附魔书和陶罐见 single_block。
-	meshBuilder := mesher.NewMesher(layout, resources.Tables)
+	var meshBuilder *mesher.Mesher[uint32] = mesher.NewMesher(layout, resources.Tables)
 	// 3. 每个请求顺序完成数据构造、网格生成与编码。
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/subchunk", func(w http.ResponseWriter, r *http.Request) {
@@ -75,40 +76,37 @@ func defaultSubchunk() []uint32 {
 	for i := range blocks {
 		blocks[i] = air
 	}
-	set := func(x, y, z int, id uint32) {
-		// MeshLayer 的布局：Y 最快，Z 次之，X 最慢。
-		blocks[layout.Index(x, y, z)] = id
-	}
+	// 所有写入用同一个布局寻址：Y 最快，Z 次之，X 最慢。
 	for x := 2; x < 14; x++ {
 		for z := 2; z < 14; z++ {
-			set(x, 0, z, stone)
+			blocks[layout.Index(x, 0, z)] = stone
 		}
 	}
 	for x := 5; x <= 10; x++ {
 		for z := 5; z <= 10; z++ {
-			set(x, 1, z, oak)
+			blocks[layout.Index(x, 1, z)] = oak
 			for y := 2; y <= 5; y++ {
 				if x == 5 || x == 10 || z == 5 || z == 10 {
-					set(x, y, z, oak)
+					blocks[layout.Index(x, y, z)] = oak
 				}
 			}
 		}
 	}
 	// 朝 +Z 开门洞；两侧和后墙留窗。
 	for x := 7; x <= 8; x++ {
-		set(x, 2, 10, air)
-		set(x, 3, 10, air)
-		set(x, 3, 5, glass)
+		blocks[layout.Index(x, 2, 10)] = air
+		blocks[layout.Index(x, 3, 10)] = air
+		blocks[layout.Index(x, 3, 5)] = glass
 	}
 	for z := 7; z <= 8; z++ {
-		set(5, 3, z, glass)
-		set(10, 3, z, glass)
+		blocks[layout.Index(5, 3, z)] = glass
+		blocks[layout.Index(10, 3, z)] = glass
 	}
 	for y := 6; y <= 9; y++ {
 		inset := y - 6
 		for x := 4 + inset; x <= 11-inset; x++ {
 			for z := 4; z <= 11; z++ {
-				set(x, y, z, spruce)
+				blocks[layout.Index(x, y, z)] = spruce
 			}
 		}
 	}

@@ -20,6 +20,7 @@ async function main(): Promise<void> {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   document.body.append(renderer.domElement);
   const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+  // Go 场景占 16³ 格；从区域外看向木屋中心，避免相机落进模型。
   camera.position.set(25, 20, 29);
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.target.set(8, 4, 8);

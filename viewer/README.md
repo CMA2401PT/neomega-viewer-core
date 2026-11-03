@@ -19,38 +19,13 @@ Go 负责网格构建及二进制编码，Web 包负责解码、材质、场景�
 
 ## 直接使用 Go 库
 
-几何使用者需要先取得表，再创建一个 Mesher。表类型和解码来自 `neomega-viewer-core/viewer/geometry`，网格构建入口来自 `neomega-viewer-core/viewer/mesher`。下面的完整示例从 viewer-core 模块根目录读取 uint32 表，将一个方块写成 NVMS 二进制；ID 来自调用者，必须存在于表中：
+几何使用者先加载配套表，再创建 Mesher，把状态 ID 转成网格。可直接运行的 [最小 Go 示例](../examples/mesh/main.go) 使用内嵌表生成石头方块，并将结果编码成 NVMS；在本模块根目录运行：
 
-```go
-package main
-
-import (
-    "flag"
-    "log"
-    "os"
-
-    "neomega-viewer-core/viewer/cube"
-    blockgeometry "neomega-viewer-core/viewer/geometry"
-    "neomega-viewer-core/viewer/mesher"
-)
-
-func main() {
-    path := flag.String("tables", "viewer/resources/geometry.nvtables", "几何表文件")
-    id := flag.Uint64("id", 0, "block ID in the table")
-    flag.Parse()
-    file, err := os.Open(*path)
-    if err != nil { log.Fatal(err) }
-    defer file.Close()
-    tables, err := blockgeometry.DecodeTables[uint32](file)
-    if err != nil { log.Fatal(err) }
-    renderer := mesher.NewMesher(cube.New(1), tables)
-    mesh, err := renderer.MeshBlock(uint32(*id))
-    if err != nil { log.Fatal(err) }
-    if err := mesh.Marshal(os.Stdout); err != nil {
-        log.Fatal(err)
-    }
-}
+```sh
+go run ./examples/mesh
 ```
+
+示例中的 `resources.Open` 取得内嵌表，`MeshBlock` 返回独立网格，`Mesh.Marshal` 把网格写入任意 `io.Writer`。文件、内存缓冲和 HTTP 响应都使用同一个编码入口。
 
 自己的数值 ID 系统可以直接构建 `geometry.Tables[B]{Index, Shapes, FullHeight}`，用 `tables.Encode(writer)` 保存。`ModelIDs(id)` 和 `Shape(modelID)` 返回共享只读数据；`FullHeight` 把原模型编号映射到满高度编号。`Shape`、`ModelID` 和 `Tables` 都由 `neomega-viewer-core/viewer/geometry` 定义。自定义 64 位 ID 可写成 `type BlockID uint64`，并使用 `Tables[BlockID]`、`DecodeTables[BlockID]` 和 `[]BlockID`；ModelID 始终是 uint32 的 Shape 下标。
 
