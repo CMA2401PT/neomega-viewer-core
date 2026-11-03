@@ -18,6 +18,7 @@ type File struct {
 type Snapshot struct {
 	Schema          int                        `json:"schema"`
 	Version         string                     `json:"version"`
+	Items           map[jmodel.ResourceID]File `json:"items"`
 	BlockStates     map[jmodel.ResourceID]File `json:"blockstates"`
 	Models          map[jmodel.ResourceID]File `json:"models"`
 	Textures        map[jmodel.ResourceID]File `json:"textures"`
@@ -32,7 +33,7 @@ type Source struct {
 }
 
 func NewSnapshot(version string) *Snapshot {
-	return &Snapshot{Schema: 1, Version: version, BlockStates: map[jmodel.ResourceID]File{}, Models: map[jmodel.ResourceID]File{}, Textures: map[jmodel.ResourceID]File{}, TextureMetadata: map[jmodel.ResourceID]File{}}
+	return &Snapshot{Schema: 1, Version: version, Items: map[jmodel.ResourceID]File{}, BlockStates: map[jmodel.ResourceID]File{}, Models: map[jmodel.ResourceID]File{}, Textures: map[jmodel.ResourceID]File{}, TextureMetadata: map[jmodel.ResourceID]File{}}
 }
 
 type Download struct {

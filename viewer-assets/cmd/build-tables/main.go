@@ -1,6 +1,7 @@
 package main
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -34,6 +35,26 @@ func main() {
 func generate(assetsDir, output, solidPath string) error {
 	builder, err := tablegen.Open(tablegen.OpenOptions{AssetsDir: assetsDir})
 	if err != nil {
+		return err
+	}
+	items, err := builder.BuildItems(assetsDir)
+	if err != nil {
+		return err
+	}
+	itemFile, err := os.Create(output + ".items.json.gz")
+	if err != nil {
+		return err
+	}
+	compressed := gzip.NewWriter(itemFile)
+	if err := json.NewEncoder(compressed).Encode(items); err != nil {
+		itemFile.Close()
+		return err
+	}
+	if err := compressed.Close(); err != nil {
+		itemFile.Close()
+		return err
+	}
+	if err := itemFile.Close(); err != nil {
 		return err
 	}
 	tables, err := builder.Build()

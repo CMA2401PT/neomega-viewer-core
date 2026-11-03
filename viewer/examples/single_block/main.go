@@ -26,10 +26,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// 2. 固定处理 1³；Java 预设加载配套资源并组装书本、陶罐、旗帜和告示牌处理器。
+	// 2. 固定处理 1³；Java 预设加载配套资源并组装方块实体和展示框处理器。
 	layout := cube.New(1)
 	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
-	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
+	// Items 提供展示框所用的普通物品几何，必须与 Tables 使用同一套图集。
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, resources.Items, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -47,10 +48,10 @@ func main() {
 		var result *dispatcher.Result
 		var err error
 		result, err = pipeline.Build(
-			// Section 表示约定的 N³ 区域，这里只有一格；实体 NBT 按局部坐标关联。
+			// Section 表示约定的 N³ 区域，这里只有一格；方块实体 NBT 按局部坐标关联。
 			dispatcher.Section{
-				Blocks:   blocks,
-				Entities: map[dispatcher.CellPos]nbt.Compound{{0, 0, 0}: scene.NBT},
+				Blocks:        blocks,
+				BlockEntities: map[dispatcher.CellPos]nbt.Compound{{0, 0, 0}: scene.NBT},
 			},
 			dispatcher.Neighbours{}, // 六向邻居留空，区域外按空气处理。
 			dispatcher.Options{},    // 默认启用剔面与相邻面合并。
@@ -81,7 +82,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(*listen, mux))
 }
 
-// 每个场景只有一个完整 Java 状态；实体 NBT 指定纹样或文字，按局部坐标绑定到这一格。
+// 每个场景只有一个完整 Java 状态；方块实体 NBT 指定纹样或文字，按局部坐标绑定到这一格。
 var scenes = map[string]struct {
 	State ir.IRBlock
 	NBT   nbt.Compound

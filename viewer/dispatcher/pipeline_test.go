@@ -57,7 +57,7 @@ func TestWaterloggedActorAndEffect(t *testing.T) {
 		cube.New(16),
 		tables(t),
 		effector.New(map[string]string{"minecraft:enchanting_table": "enchanting_table_book"}),
-		blockactor.New(handler),
+		blockactor.New(handler), nil,
 		nil,
 	)
 	input := section()
@@ -66,7 +66,7 @@ func TestWaterloggedActorAndEffect(t *testing.T) {
 	input.Blocks.Set(cube.New(16).Index(4, 5, 6), futurePot)
 	input.Blocks.Set(cube.New(16).Index(8, 5, 6), pot)
 	input.Blocks.Set(cube.New(16).Index(1, 2, 3), ir.IRBlock("minecraft:enchanting_table []"))
-	input.Entities = map[dispatcher.CellPos]nbt.Compound{
+	input.BlockEntities = map[dispatcher.CellPos]nbt.Compound{
 		{4, 5, 6}: {"sherds": []string{"minecraft:brick"}},
 		{8, 5, 6}: {"fail": true},
 	}
@@ -78,7 +78,7 @@ func TestWaterloggedActorAndEffect(t *testing.T) {
 	if len(result.Frame.Actors) != 1 || result.Frame.Actors[0].Pos != (dispatcher.CellPos{4, 5, 6}) || result.Frame.Actors[0].Mesh.Quads[0].Positions[0] != (geometry.Vec3{4, 5, 6}) {
 		t.Fatal("successful actor or translation lost", result.Frame.Actors)
 	}
-	if len(handler.inputs) != 2 || !handler.inputs[0].Waterlogged || handler.inputs[0].State != futurePot || !reflect.DeepEqual(handler.inputs[0].NBT, input.Entities[dispatcher.CellPos{4, 5, 6}]) {
+	if len(handler.inputs) != 2 || !handler.inputs[0].Waterlogged || handler.inputs[0].State != futurePot || !reflect.DeepEqual(handler.inputs[0].NBT, input.BlockEntities[dispatcher.CellPos{4, 5, 6}]) {
 		t.Fatal("complete actor input lost", handler.inputs)
 	}
 	if len(result.Frame.Effects) != 1 || result.Frame.Effects[0].Effect != "enchanting_table_book" {
@@ -109,7 +109,7 @@ func TestMissingDiagnosticsPreserveState(t *testing.T) {
 	missing := &blockgeometry.Shape{Quads: []geometry.Quad{{Color: [3]float32{1, 0, 1}}}}
 	pipeline := dispatcher.NewPipeline(cube.New(16), &blockgeometry.Tables[uint32]{
 		Index: map[uint32][]blockgeometry.ModelID{ir.IRBlock("minecraft:air []").Hash(): {}},
-	}, effector.New(nil), blockactor.New(), missing)
+	}, effector.New(nil), blockactor.New(), nil, missing)
 	input := section()
 	state := ir.IRBlock(`example:unknown ["waterlogged"="true"]`)
 	input.Blocks.Set(cube.New(16).Index(4, 5, 6), state)
@@ -123,7 +123,7 @@ func TestMissingDiagnosticsPreserveState(t *testing.T) {
 	if result.Diagnostics[0] != want {
 		t.Fatal(result.Diagnostics)
 	}
-	strict := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(), nil)
+	strict := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(), nil, nil)
 	if _, err := strict.Build(input, dispatcher.Neighbours{}, dispatcher.Options{}); err == nil {
 		t.Fatal("missing shape nil did not return error")
 	}
@@ -141,7 +141,7 @@ func (s *source) Section(ctx context.Context, pos dispatcher.SectionPos) (*dispa
 }
 
 func TestBuildSectionsCachesNeighbours(t *testing.T) {
-	pipeline := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(), nil)
+	pipeline := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(), nil, nil)
 	s := &source{
 		sections: map[dispatcher.SectionPos]*dispatcher.Section{},
 		calls:    map[dispatcher.SectionPos]int{},
@@ -179,7 +179,7 @@ func TestBuildSectionsCachesNeighbours(t *testing.T) {
 
 func TestActorNeighboursDoNotOcclude(t *testing.T) {
 	handler := &actorHandler{names: []string{"minecraft:stone"}}
-	pipeline := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(handler), nil)
+	pipeline := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(handler), nil, nil)
 	input := section()
 	input.Blocks.Set(cube.New(16).Index(0, 0, 0), ir.IRBlock("minecraft:dirt []"))
 	neighbour := section()

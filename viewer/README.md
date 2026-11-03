@@ -1,11 +1,12 @@
 # Java 渲染核心
 
-渲染器把完整 Java 方块状态和方块实体 NBT 转成浏览器可绘制的几何与特效。
+渲染器把完整 Java 方块状态、方块实体 NBT 和普通实体转成浏览器可绘制的几何与特效。
 Go 负责网格构建及二进制编码，Web 包负责解码、材质、场景与动画。
 方块实体 NBT 是附着于方块的结构化数据，例如陶罐四面的纹样。
 
 `geometry` 表达单个方块形状并解析 Java 模型，`resources` 分发预置几何和配套图集。
 公共几何与图集的生成由同模块的 `viewer-assets` 负责；特殊处理器的固定图片与其代码放在一起。
+普通静态物品由 [item_render](item_render/README.md) 按真实物品定义编译，展示框由 `entity_render` 组合框体与物品。
 `mesher` 按邻居覆盖剔面和合并，`dispatcher` 将普通方块、特效和依赖 NBT 的外观分别处理，再由 `merger` 编码成完整快照。
 渲染入口使用已经确定的 Java 状态，是否先调用 fixer 由外层应用决定。
 
@@ -81,7 +82,7 @@ NVMS 保存 float32 绘制数据，按材质分批后的顺序恢复四边形。
 
 构建期间调用者应保持输入切片和 Tables 不变。同一个 Mesher 可以并发处理不同输入，输出网格的修改不会改变共享表。Mesh 方法只返回几何和统计，Java 状态由调用者从 `neomega-blocks/presets/java/v1.HashToBlock` 查询。
 
-演示程序用 `neomega-viewer-core/viewer/resources.Open` 加载内嵌表，或通过 `OpenOptions{TablesPath: "/path/to/geometry.nvtables"}` 加载文件及配套的 `.java.json` 旁文件。
+演示程序用 `neomega-viewer-core/viewer/resources.Open` 加载内嵌表，或通过 `OpenOptions{TablesPath: "/path/to/geometry.nvtables"}` 加载文件及配套的 `.java.json`、`.items.json.gz` 旁文件。
 需要同时返回 Java 状态和渲染类别时，应用层的 [singleblock](../../apps/neomega-viewer/demo/singleblock/engine.go) 在核心网格之外补充这些元数据。
 应用层的 [HTTP 接口](../../apps/neomega-viewer/demo/httpapi/handler.go) 将状态展开为网页使用的名称和属性对象。
 
@@ -120,12 +121,14 @@ if err := result.Mesh.Marshal(writer); err != nil {
 - **effector 段**：特效消息，例如 `{pos: [3,1,3], effect: "enchanting_table_book"}`。本体照常在 mesher 段里，特效由前端程序驱动。
 - **block actor 段**：按 NBT 生成的几何，坐标已是子区块局部坐标。成功构建的 actor 替换该格的静态本体。
 
-Java 的默认组合由 `javapreset.NewPipeline` 提供，启用附魔书、陶罐、旗帜和告示牌。各处理器在构造函数中读取内嵌资源，组装入口只需几何表和尺寸。通用 `dispatcher` 不依赖这些具体处理器。`blocks` 是 `*blockdata.Blocks`，包含状态调色板和 N³ 个未压缩索引，实体来自已解码的 Java NBT：
+Java 的默认组合由 `javapreset.NewPipeline` 提供，启用附魔书、陶罐、旗帜、告示牌和静态展示框。各方块处理器在构造函数中读取内嵌资源，展示框使用与方块表配套的物品目录。方块处理器由调用方组合，普通实体交给 `entity_render`。`blocks` 是 `*blockdata.Blocks`，包含状态调色板和 N³ 个未压缩索引，实体来自已解码的 Java NBT：
 
 ```go
 layout := cube.New(1)
 blocks := blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:enchanting_table []"))
-pipeline, err := javapreset.NewPipeline(layout, tables, nil)
+resources, err := preset.Open(preset.OpenOptions{})
+if err != nil { return err }
+pipeline, err := javapreset.NewPipeline(layout, resources.Tables, resources.Items, nil)
 if err != nil { return err }
 result, err := pipeline.Build(
     dispatcher.Section{Blocks: blocks},
@@ -141,6 +144,10 @@ if err := result.Frame.Marshal(writer); err != nil {
 ```
 
 `Build` 按调色板项调用 `splitlayer.SplitBlock`，再展开到 N³ 格，因此预置状态集以外的含水状态也能拆开。路由来自已启用的 handler 和 effect 的方块名。actor 逐格构建，成功才移除本体层，水层保留；失败时保留静态本体并产生 `ActorError` 诊断，其他格继续构建。诊断携带拆层前的完整状态和格内坐标。NVFR 的字节布局见 [merger/FORMAT.md](merger/FORMAT.md)。
+
+方块实体放在 `Section.BlockEntities`，按格内整数坐标索引。普通实体放在可选的 `Section.Entities`，包含局部浮点位置和原始 NBT。它的 `List` 决定本次输出归属；可选的 `Query` 只提供同一局部坐标系内的候选，允许多返回，不能增加输出实体。展示框不需要 Query。`Blocks == nil` 的区域仍然可以输出实体。
+
+展示框几何追加到 `Frame.Mesh`，不占用 block actor 通道，也不改变 NVFR。物品失败时保留框体，错误通过独立的 `Result.EntityDiagnostics` 返回。普通物品与 `fixed` 变换的边界见 [item_render](item_render/README.md)。
 
 中心、六向邻居及批量来源都必须遵守同一构建器的尺寸。需要跨 section 剔面时，`Neighbours` 按西、东、下、上、北、南传入邻居，nil 代表空空间。邻居只提供拆层后的覆盖信息；actor 候选格的本体不参与遮挡，水层仍提供覆盖。这种处理可能保留额外的面，避免用静态本体误遮挡 actor 周围的可见表面。
 
@@ -164,7 +171,7 @@ NVFR v2 携带 actor 的私有图片，Go/TS 解码器仍可读取不含图片�
 go generate ./viewer/resources
 ```
 
-入口直接读取 `viewer-assets/dist/final`，同时更新几何、元数据、实心表与公共图集。
+入口直接读取 `viewer-assets/dist/final`，同时更新方块几何、物品目录、元数据、实心表与公共图集。
 准备资源与验证建表的命令见 [生成器说明](../viewer-assets/cmd/build-tables/README.md)。
 几何中的 UV 与图集布局配套，更新后应重新构建使用这些资源的程序。
 

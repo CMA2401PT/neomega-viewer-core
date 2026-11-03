@@ -22,15 +22,15 @@ func main() {
 		log.Fatal(err)
 	}
 	layout := cube.New(16)
-	pipeline, err := javapreset.NewPipeline(layout, preset.Tables, nil)
+	pipeline, err := javapreset.NewPipeline(layout, preset.Tables, preset.Items, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	section := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")), Entities: map[dispatcher.CellPos]nbt.Compound{}}
+	section := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")), BlockEntities: map[dispatcher.CellPos]nbt.Compound{}}
 	for i, color := range []string{"white", "yellow"} {
 		pos := dispatcher.CellPos{uint8(3 + 3*i), 1, 3}
 		section.Blocks.Set(layout.Index(int(pos[0]), 1, 3), ir.IRBlock("minecraft:"+color+`_banner ["rotation"="0"]`))
-		section.Entities[pos] = nbt.Compound{"patterns": []any{map[string]any{"pattern": "minecraft:stripe_bottom", "color": "blue"}, map[string]any{"pattern": "minecraft:cross", "color": "red"}}}
+		section.BlockEntities[pos] = nbt.Compound{"patterns": []any{map[string]any{"pattern": "minecraft:stripe_bottom", "color": "blue"}, map[string]any{"pattern": "minecraft:cross", "color": "red"}}}
 	}
 	result, err := pipeline.Build(section, dispatcher.Neighbours{}, dispatcher.Options{})
 	if err != nil {

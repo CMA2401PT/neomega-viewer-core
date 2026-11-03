@@ -1,6 +1,6 @@
 # viewer-assets
 
-`viewer-assets` 把 Minecraft Java 客户端 JAR 中分散的方块资源，整理成渲染器可以加载的模型、渲染方式说明和纹理图集。它用 Go 实现；从解包到输出分成五步，每一步都留下可以独立检查和复用的中间文件。
+`viewer-assets` 把 Minecraft Java 客户端 JAR 中分散的方块和物品资源，整理成渲染器可以加载的模型、渲染方式说明和纹理图集。它用 Go 实现；从解包到输出分成五步，每一步都留下可以独立检查和复用的中间文件。
 
 理解整个流程，只需要先记住：**方块状态选择模型，模型引用纹理，图集坐标表告诉渲染器去 PNG 的哪里取这张纹理。** 但箱子、旗帜等方块的外形由游戏代码绘制，JAR 中没有完整方块模型。本工具为它们补充静态预览，并用另一张表说明完整渲染还需要什么数据。
 
@@ -24,17 +24,18 @@ go run ./cmd/neomega-assets build -jar /path/to/client.jar
 
 可以用 `-version` 显式选择其他版本，或用 `-version latest` 跟随最新正式版。与 `neomega-blocks` 配套时，应使用它的 `JavaTargetVersion` 对应版本。需要复现结果时，指定版本或固定的本地 JAR。
 
-完成后，`dist/final` 中有五份配套产物：
+完成后，`dist/final` 中有以下配套产物：
 
 | 文件 | 它回答的问题 |
 |---|---|
 | `blockstates.json` | 方块状态选择哪些模型？ |
+| `items.json` | 普通物品 ID 引用哪个模型，哪些定义需要其他渲染能力？ |
 | `models.json` | 模型的几何、继承和纹理引用是什么？ |
 | `blockRenderers.json` | 可以使用静态模型吗？完整外观还依赖什么渲染方式和运行时数据？ |
 | `blocksAtlases.json` | 每张纹理的位置、尺寸和动画帧信息是什么？ |
 | `blocksAtlasLatest.png` | 坐标表指向的实际像素在哪里？ |
 
-这五份文件应整组使用。`build-info.json` 记录版本、来源和数量；`THIRD_PARTY_NOTICES.txt` 保存来源与许可声明。下载缓存在 `.cache`，中间生成文件在 `dist/works`，交付文件在 `dist/final`。`.cache` 与 `dist` 已加入 `.gitignore`。
+这些文件应整组使用。`build-info.json` 记录版本、来源和数量；`THIRD_PARTY_NOTICES.txt` 保存来源与许可声明。下载缓存在 `.cache`，中间生成文件在 `dist/works`，交付文件在 `dist/final`。`.cache` 与 `dist` 已加入 `.gitignore`。
 
 ## 读取交付文件
 
@@ -98,7 +99,7 @@ go run ./cmd/neomega-assets extract \
   -out dist/works/01-extracted
 ```
 
-范围包括 `assets/<namespace>/blockstates`、`models`、纹理 PNG 和旁边的 `.png.mcmeta` 元数据。目录层级和命名空间会保留。
+范围包括 `assets/<namespace>/blockstates`、`items`、`models`、纹理 PNG 和旁边的 `.png.mcmeta` 元数据。目录层级和命名空间会保留。
 
 索引用 `minecraft:block/stone` 这样的**资源 ID** 作为键。它是资源的名字，与磁盘路径、游戏中的运行时方块 ID 是不同概念。索引中的文件路径相对于 `snapshot.json` 所在目录；来源字段记录对应的 JAR 条目。
 
@@ -201,7 +202,7 @@ go run ./cmd/neomega-assets special \
 
 ## 第五步：把所需纹理放进图集
 
-完整模型和渲染需求已经明确，才能决定哪些纹理必须交付。`s05_atlas` 收录全部方块纹理、模型引用的其他纹理，以及第四步声明的纹理族：
+完整模型和渲染需求已经明确，才能决定哪些纹理必须交付。`s05_atlas` 收录全部方块纹理、模型引用的其他纹理、普通物品纹理，以及第四步声明的纹理族：
 
 ```sh
 go run ./cmd/neomega-assets atlas \
@@ -209,6 +210,8 @@ go run ./cmd/neomega-assets atlas \
   -models dist/works/04-renderers \
   -out dist/final
 ```
+
+普通物品从 `items/*.json` 中的 `minecraft:model` 定义取得模型 ID，不根据物品名称猜测模型路径。复杂选择树和 tint 定义在 `items.json` 中保留不支持原因。普通模型的缺失引用使生成失败。展示框的两种框体模型也参与依赖收集。
 
 普通方块纹理缩放到默认的 16×16 格子。动画方块纹理按 `.mcmeta` 的 `frames` 顺序逐帧缩放，再从上到下拼成一条；重复索引也保留。没有显式列表时按帧索引顺序收录全部帧。非块纹理保留原尺寸；带动画元数据时仍只取首帧。
 
@@ -218,7 +221,7 @@ go run ./cmd/neomega-assets atlas \
 
 动画的坐标覆盖整条区域。第 `i` 帧（从 0 开始）的纵向起点为 `v + i * sv / frames`，高度为 `sv / frames`；横向范围不变。消费者应保留整条区域及帧信息，再选择当前帧。
 
-这一步同时导出方块状态表、模型表、渲染说明、坐标表和 PNG，防止消费者把不同构建的文件混用。
+这一步同时导出方块状态表、物品模型引用、模型表、渲染说明、坐标表和 PNG，防止消费者把不同构建的文件混用。
 
 实现入口：[s05_atlas/atlas.go](s05_atlas/atlas.go)。
 
@@ -249,7 +252,7 @@ go run ./cmd/neomega-assets audit \
 | 原生模型 / 特殊静态预览 | 955 / 134 |
 | 流体 / 不可见 / 运行时动态 | 3 / 6 / 1 |
 | 原始 JAR 方块纹理收录 | 1,039 / 1,039 |
-| 最终图集纹理数 / 尺寸 | 1,218 / 2048×1024 |
+| 最终图集纹理数 / 尺寸 | 1,603 / 2048×1024 |
 | 旧表可见、原始模型无几何的方块 | 127 |
 | 补全后仍存在上述缺口的方块 | 0 |
 

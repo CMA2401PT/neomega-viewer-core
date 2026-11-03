@@ -17,7 +17,7 @@ func TestGeneratedWorld(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, resources.Items, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

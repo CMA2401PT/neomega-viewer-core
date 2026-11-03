@@ -78,6 +78,8 @@ func applyPack(snapshot *asset.Snapshot, output, pack string) error {
 		}
 		file := asset.File{Path: filepath.ToSlash(relative), Origin: path}
 		switch category {
+		case "items":
+			snapshot.Items[id] = file
 		case "blockstates":
 			snapshot.BlockStates[id] = file
 		case "models":

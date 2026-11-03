@@ -9,11 +9,13 @@ import (
 	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/dispatcher"
 	"neomega-viewer-core/viewer/effector"
+	"neomega-viewer-core/viewer/entity_render"
 	core "neomega-viewer-core/viewer/geometry"
+	"neomega-viewer-core/viewer/item_render"
 )
 
-// NewPipeline 组装附魔书、陶罐、旗帜和告示牌；处理器自行加载内嵌图片，不需要外部资源目录。
-func NewPipeline(layout cube.Layout, tables *core.Tables[uint32], missing *core.Shape) (*dispatcher.Pipeline, error) {
+// NewPipeline 组装方块处理器和展示框；items 必须与 tables 使用同一套公共图集。
+func NewPipeline(layout cube.Layout, tables *core.Tables[uint32], items *item_render.Catalog, missing *core.Shape) (*dispatcher.Pipeline, error) {
 	pot, err := decoratedpot.New(tables)
 	if err != nil {
 		return nil, err
@@ -31,6 +33,7 @@ func NewPipeline(layout cube.Layout, tables *core.Tables[uint32], missing *core.
 		tables,
 		effector.New(map[string]string{"minecraft:enchanting_table": "enchanting_table_book"}),
 		blockactor.New(pot, flag, board),
+		entity_render.New(items, item_render.New(items)),
 		missing,
 	), nil
 }

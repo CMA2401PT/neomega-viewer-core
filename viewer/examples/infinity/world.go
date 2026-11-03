@@ -48,8 +48,8 @@ func (generatedWorld) Section(_ context.Context, pos dispatcher.SectionPos) (*di
 	}
 	// 1. 从空气开始填充完整状态；同一布局决定格子数和 X-Z-Y 索引顺序。
 	section := &dispatcher.Section{
-		Blocks:   blockdata.Uniform(layout.Len(), air),
-		Entities: map[dispatcher.CellPos]nbt.Compound{},
+		Blocks:        blockdata.Uniform(layout.Len(), air),
+		BlockEntities: map[dispatcher.CellPos]nbt.Compound{},
 	}
 	var side int = layout.Side()
 	var originX int64 = int64(pos.X) * int64(side)
@@ -78,11 +78,11 @@ func (generatedWorld) Section(_ context.Context, pos dispatcher.SectionPos) (*di
 	x, z = 10+random.IntN(4), 2+random.IntN(12)
 	y = surfaceHeight(originX+int64(x), originZ+int64(z)) + 1
 	section.Blocks.Set(layout.Index(x, y, z), pots[random.IntN(len(pots))])
-	// 3. 实体 NBT 关联局部坐标；四片陶片按 back、left、right、front 排列。
+	// 3. 方块实体 NBT 关联局部坐标；四片陶片按 back、left、right、front 排列。
 	var items []string = make([]string, 4)
 	for side := range items {
 		items[side] = sherds[random.IntN(len(sherds))]
 	}
-	section.Entities[dispatcher.CellPos{uint8(x), uint8(y), uint8(z)}] = nbt.Compound{"sherds": items}
+	section.BlockEntities[dispatcher.CellPos{uint8(x), uint8(y), uint8(z)}] = nbt.Compound{"sherds": items}
 	return section, nil
 }

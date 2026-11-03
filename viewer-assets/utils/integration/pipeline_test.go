@@ -81,12 +81,15 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 	jar := filepath.Join(root, "client.jar")
 	entries := map[string][]byte{
 		"version.json": []byte(`{"id":"fixture"}`),
-		"assets/minecraft/blockstates/stone.json":          []byte(`{"variants":{"": [{"model":"minecraft:block/stone","weight":2},{"model":"minecraft:block/stone","y":90}]}}`),
-		"assets/minecraft/models/block/cube_all.json":      []byte(`{"elements":[{"name":"test cube","shade_direction_override":"north","from":[0,0,0],"to":[16,16,16],"faces":{"north":{"texture":"#all"}}}]}`),
-		"assets/minecraft/models/block/stone.json":         []byte(`{"parent":"minecraft:block/cube_all","textures":{"all":{"sprite":"minecraft:block/stone","force_translucent":true}},"texture_size":[16,16]}`),
-		"assets/demo/blockstates/panel.json":               []byte(`{"multipart":[{"when":{"OR":[{"axis":"x"},{"AND":[{"axis":"y"},{"lit":true}]}]},"apply":{"model":"demo:block/panel"}}]}`),
-		"assets/demo/models/block/panel.json":              []byte(`{"textures":{"skin":"demo:entity/panel","animated":"demo:entity/animated_panel"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#skin"},"down":{"texture":"#animated"}}}]}`),
-		"assets/minecraft/textures/block/stone.png.mcmeta": []byte(`{"animation":{"frames":[{"index":1,"time":3},0,1]}}`),
+		"assets/minecraft/models/block/item_frame.json":      []byte(`{}`),
+		"assets/minecraft/models/block/glow_item_frame.json": []byte(`{}`),
+		"assets/demo/items/separate_id.json":                 []byte(`{"model":{"type":"minecraft:model","model":"demo:block/panel"}}`),
+		"assets/minecraft/blockstates/stone.json":            []byte(`{"variants":{"": [{"model":"minecraft:block/stone","weight":2},{"model":"minecraft:block/stone","y":90}]}}`),
+		"assets/minecraft/models/block/cube_all.json":        []byte(`{"elements":[{"name":"test cube","shade_direction_override":"north","from":[0,0,0],"to":[16,16,16],"faces":{"north":{"texture":"#all"}}}]}`),
+		"assets/minecraft/models/block/stone.json":           []byte(`{"parent":"minecraft:block/cube_all","textures":{"all":{"sprite":"minecraft:block/stone","force_translucent":true}},"texture_size":[16,16]}`),
+		"assets/demo/blockstates/panel.json":                 []byte(`{"multipart":[{"when":{"OR":[{"axis":"x"},{"AND":[{"axis":"y"},{"lit":true}]}]},"apply":{"model":"demo:block/panel"}}]}`),
+		"assets/demo/models/block/panel.json":                []byte(`{"textures":{"skin":"demo:entity/panel","animated":"demo:entity/animated_panel"},"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#skin"},"down":{"texture":"#animated"}}}]}`),
+		"assets/minecraft/textures/block/stone.png.mcmeta":   []byte(`{"animation":{"frames":[{"index":1,"time":3},0,1]}}`),
 		"assets/minecraft/textures/block/stone.png": fixturePNG(t, 16, 32, func(x, y int) color.NRGBA {
 			if y >= 16 {
 				return color.NRGBA{G: 255, A: 255}
@@ -244,6 +247,10 @@ func TestJARToTablesAndPixelCoordinates(t *testing.T) {
 		}
 		occupied = append(occupied, rect)
 	}
+	items := readJSON[asset.ItemModels](t, filepath.Join(output, "items.json"))
+	if items.Models["demo:separate_id"] != "demo:block/panel" {
+		t.Fatalf("item reference lost across extraction and patching: %+v", items)
+	}
 	parsed, err := jmodel.Load(output)
 	if err != nil {
 		t.Fatal(err)
@@ -344,8 +351,10 @@ func TestJava1214BedHangingSignAndBannerPreviews(t *testing.T) {
 	jar := filepath.Join(root, "client.jar")
 	entries := map[string][]byte{
 		"version.json": []byte(`{"id":"1.21.4"}`),
-		"assets/minecraft/models/block/block.json":    []byte(`{}`),
-		"assets/minecraft/models/block/cube_all.json": []byte(`{"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#all"}}}]}`),
+		"assets/minecraft/models/block/item_frame.json":      []byte(`{}`),
+		"assets/minecraft/models/block/glow_item_frame.json": []byte(`{}`),
+		"assets/minecraft/models/block/block.json":           []byte(`{}`),
+		"assets/minecraft/models/block/cube_all.json":        []byte(`{"elements":[{"from":[0,0,0],"to":[16,16,16],"faces":{"up":{"texture":"#all"}}}]}`),
 	}
 	for _, name := range []string{"red_bed", "oak_wall_hanging_sign", "red_banner"} {
 		entries["assets/minecraft/blockstates/"+name+".json"] = []byte(`{"variants":{"":{"model":"block/` + name + `"}}}`)

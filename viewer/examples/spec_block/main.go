@@ -29,9 +29,10 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// 2. Java 预设组装书本、陶罐和旗帜，处理器自行加载各自内嵌的图片。
+	// 2. Java 预设组装方块实体和展示框处理器，处理器自行加载各自内嵌的图片。
 	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
-	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
+	// Items 提供展示框所用的普通物品几何，必须与 Tables 使用同一套图集。
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, resources.Items, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -85,11 +86,11 @@ func defaultSubchunk() dispatcher.Section {
 	glass := ir.IRBlock("minecraft:glass []")
 	// 保留完整 Java 状态，Pipeline 才能识别含水、effect 与 actor；Indices 每格一个索引。
 	section := dispatcher.Section{
-		Blocks:   blockdata.Uniform(layout.Len(), air),
-		Entities: map[dispatcher.CellPos]nbt.Compound{},
+		Blocks:        blockdata.Uniform(layout.Len(), air),
+		BlockEntities: map[dispatcher.CellPos]nbt.Compound{},
 	}
 	set := func(x, y, z int, state ir.IRBlock) {
-		// 线性索引中 Y 最快、Z 次之、X 最慢；实体 NBT 则直接用局部 (x,y,z)。
+		// 线性索引中 Y 最快、Z 次之、X 最慢；方块实体 NBT 则直接用局部 (x,y,z)。
 		section.Blocks.Set(layout.Index(x, y, z), state)
 	}
 	for x := 2; x < 14; x++ {
@@ -134,7 +135,7 @@ func defaultSubchunk() dispatcher.Section {
 		var state ir.IRBlock = ir.IRBlock(`minecraft:decorated_pot ["facing"="` + facing + `","cracked"="false","waterlogged"="false"]`).Tidy()
 		set(int(pos[0]), int(pos[1]), int(pos[2]), state)
 		// 四面顺序：back、left、right、front；纹样来自 NBT，而非方块状态。
-		section.Entities[pos] = nbt.Compound{
+		section.BlockEntities[pos] = nbt.Compound{
 			"sherds": []string{
 				"minecraft:angler_pottery_sherd",
 				"minecraft:archer_pottery_sherd",
@@ -147,7 +148,7 @@ func defaultSubchunk() dispatcher.Section {
 	for i, color := range []string{"white", "yellow"} {
 		pos := dispatcher.CellPos{uint8(3 + 3*i), 1, 3}
 		set(int(pos[0]), int(pos[1]), int(pos[2]), ir.IRBlock("minecraft:"+color+`_banner ["rotation"="0"]`))
-		section.Entities[pos] = nbt.Compound{"patterns": []any{
+		section.BlockEntities[pos] = nbt.Compound{"patterns": []any{
 			map[string]any{"pattern": "minecraft:stripe_bottom", "color": "blue"},
 			map[string]any{"pattern": "minecraft:cross", "color": "red"},
 			map[string]any{"pattern": "minecraft:border", "color": "black"},

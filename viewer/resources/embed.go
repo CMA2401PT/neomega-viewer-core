@@ -8,7 +8,7 @@ import (
 // 从配套资源构建几何、元数据、实心表和贴图。
 //go:generate go run ../../viewer-assets/cmd/build-tables
 
-//go:embed geometry.nvtables geometry.nvtables.java.json
+//go:embed geometry.nvtables geometry.nvtables.java.json geometry.nvtables.items.json.gz
 var Files embed.FS
 
 //go:embed textures

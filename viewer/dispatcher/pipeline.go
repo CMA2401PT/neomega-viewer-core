@@ -10,6 +10,7 @@ import (
 	"neomega-viewer-core/viewer/blockdata"
 	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/effector"
+	"neomega-viewer-core/viewer/entity_render"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/merger"
 	"neomega-viewer-core/viewer/mesher"
@@ -19,11 +20,12 @@ import (
 // section 内按 x、y、z 定位方块实体，与格内几何的平移一致。
 type CellPos = [3]uint8
 
-// Section 是构建器约定的一个 N³ 区域，不保存尺寸；Blocks 为 nil 表示空区域。
+// Section 是构建器约定的一个 N³ 区域，不保存尺寸；Blocks 为 nil 表示没有方块，仍可渲染普通实体。
 type Section struct {
 	// 完整 Java 状态保留含水属性，诊断和 actor 均使用拆层前的状态。
-	Blocks   *blockdata.Blocks
-	Entities map[CellPos]nbt.Compound
+	Blocks        *blockdata.Blocks
+	BlockEntities map[CellPos]nbt.Compound
+	Entities      *entity_render.Input
 }
 
 // 顺序为西、东、下、上、北、南；邻居与中心使用相同 N，nil 表示空空间。
@@ -49,6 +51,7 @@ type Pipeline struct {
 	mesher      *mesher.Mesher[uint32]
 	effects     *effector.Effector
 	actors      *blockactor.Dispatcher
+	entities    *entity_render.Renderer
 	effectNames map[string]bool
 	actorNames  map[string]bool
 	missing     *blockgeometry.Shape
@@ -60,9 +63,10 @@ type Options struct {
 }
 
 type Result struct {
-	Frame       merger.Frame
-	Stats       mesher.Stats
-	Diagnostics []Diagnostic
+	Frame             merger.Frame
+	Stats             mesher.Stats
+	Diagnostics       []Diagnostic
+	EntityDiagnostics []entity_render.Issue
 }
 
 // NewPipeline 固定区域布局与处理器组合，后续所有输入都遵守这个尺寸。
@@ -71,6 +75,7 @@ func NewPipeline(
 	tables *blockgeometry.Tables[uint32],
 	effects *effector.Effector,
 	actors *blockactor.Dispatcher,
+	entities *entity_render.Renderer,
 	missing *blockgeometry.Shape,
 ) *Pipeline {
 	// 从已启用的处理器生成路由，认领范围和实际可调用的处理器保持一致。
@@ -78,6 +83,7 @@ func NewPipeline(
 		mesher:      mesher.NewMesher(layout, tables),
 		effects:     effects,
 		actors:      actors,
+		entities:    entities,
 		effectNames: map[string]bool{},
 		actorNames:  map[string]bool{},
 		missing:     missing,
@@ -99,13 +105,14 @@ type prepared struct {
 	states     []ir.IRBlock
 	effects    []effector.Input
 	actors     []blockactor.Input
+	entities   *entity_render.Input
 }
 
 var air = ir.IRBlock("minecraft:air []").Hash()
 
 func (p *Pipeline) prepare(section Section) (*prepared, error) {
 	// 按调色板项拆层与路由，再展开到构建器约定的 N³ 格，兼容预置全集以外的 Java 状态。
-	result := &prepared{}
+	result := &prepared{entities: section.Entities}
 	if section.Blocks == nil {
 		return result, nil
 	}
@@ -146,7 +153,7 @@ func (p *Pipeline) prepare(section Section) (*prepared, error) {
 			result.actors = append(result.actors, blockactor.Input{
 				Pos:         pos,
 				State:       state,
-				NBT:         section.Entities[pos],
+				NBT:         section.BlockEntities[pos],
 				Waterlogged: len(parts[index]) > 1 && parts[index][1] != air,
 			})
 		}
@@ -231,6 +238,11 @@ func (p *Pipeline) build(section *prepared, neighbours [6]*prepared, options Opt
 		}
 	}
 	result.Frame.Mesh = static.Mesh
+	if section.entities != nil && p.entities != nil {
+		mesh, issues := p.entities.Build(*section.entities)
+		result.Frame.Mesh.Quads = append(result.Frame.Mesh.Quads, mesh.Quads...)
+		result.EntityDiagnostics = issues
+	}
 	result.Frame.Effects = p.effects.Build(section.effects)
 	result.Stats = static.Stats
 	return result, nil

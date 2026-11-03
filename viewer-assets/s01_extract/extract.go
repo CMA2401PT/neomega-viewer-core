@@ -36,7 +36,7 @@ func Classify(name string) (category string, id jmodel.ResourceID, ok bool) {
 	category = parts[2]
 	resource := parts[3]
 	switch category {
-	case "blockstates", "models":
+	case "blockstates", "models", "items":
 		if !strings.HasSuffix(resource, ".json") {
 			return "", "", false
 		}
@@ -115,6 +115,8 @@ func Run(ctx context.Context, opt Options) (*asset.Snapshot, error) {
 		}
 		file := asset.File{Path: entry.Name, Origin: "jar:" + entry.Name}
 		switch category {
+		case "items":
+			snapshot.Items[id] = file
 		case "blockstates":
 			snapshot.BlockStates[id] = file
 		case "models":

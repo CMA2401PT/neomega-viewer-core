@@ -1,15 +1,18 @@
 package geometry
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"os"
 	"sync"
 
 	core "neomega-viewer-core/viewer/geometry"
+	"neomega-viewer-core/viewer/item_render"
 )
 
 type OpenOptions struct {
-	// 留空使用随库分发的表，外部表的 Java 元数据来自同名 .java.json 文件。
+	// 留空使用随库分发的表，外部表还需同名 .java.json 元数据及 .items.json.gz 物品目录。
 	TablesPath string
 }
 
@@ -17,6 +20,7 @@ type OpenOptions struct {
 type Preset struct {
 	Tables   *core.Tables[uint32]
 	Metadata Metadata
+	Items    *item_render.Catalog
 }
 
 var bundledTables = sync.OnceValues(func() (*core.Tables[uint32], error) {
@@ -58,5 +62,22 @@ func Open(options OpenOptions) (*Preset, error) {
 	if err := json.Unmarshal(data, &metadata); err != nil {
 		return nil, err
 	}
-	return &Preset{Tables: tables, Metadata: metadata}, nil
+	if options.TablesPath == "" {
+		data, err = Files.ReadFile("geometry.nvtables.items.json.gz")
+	} else {
+		data, err = os.ReadFile(options.TablesPath + ".items.json.gz")
+	}
+	if err != nil {
+		return nil, err
+	}
+	compressed, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer compressed.Close()
+	var items item_render.Catalog
+	if err := json.NewDecoder(compressed).Decode(&items); err != nil {
+		return nil, err
+	}
+	return &Preset{Tables: tables, Metadata: metadata, Items: &items}, nil
 }

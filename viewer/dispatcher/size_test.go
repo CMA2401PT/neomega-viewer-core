@@ -21,7 +21,7 @@ func TestConfiguredSizesAndNeighbours(t *testing.T) {
 	for _, side := range []int{1, 2, 3, 16} {
 		t.Run(fmt.Sprint(side), func(t *testing.T) {
 			layout := cube.New(side)
-			pipeline := dispatcher.NewPipeline(layout, resources, effector.New(nil), blockactor.New(), nil)
+			pipeline := dispatcher.NewPipeline(layout, resources, effector.New(nil), blockactor.New(), nil, nil)
 			input := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:stone []"))}
 			for direction := -1; direction < 6; direction++ {
 				var neighbours dispatcher.Neighbours
@@ -66,7 +66,7 @@ func TestConfiguredFluidHeight(t *testing.T) {
 	resources := tables(t)
 	for _, side := range []int{1, 3} {
 		layout := cube.New(side)
-		pipeline := dispatcher.NewPipeline(layout, resources, effector.New(nil), blockactor.New(), nil)
+		pipeline := dispatcher.NewPipeline(layout, resources, effector.New(nil), blockactor.New(), nil, nil)
 		input := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock(`minecraft:water ["level"="0"]`))}
 		for _, above := range []bool{false, true} {
 			var neighbours dispatcher.Neighbours
@@ -98,12 +98,12 @@ func TestSmallRegionActorCoordinates(t *testing.T) {
 		layout,
 		tables(t),
 		effector.New(map[string]string{"minecraft:enchanting_table": "enchanting_table_book"}),
-		blockactor.New(handler),
+		blockactor.New(handler), nil,
 		nil,
 	)
 	input := dispatcher.Section{
-		Blocks:   blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")),
-		Entities: map[dispatcher.CellPos]nbt.Compound{{2, 1, 0}: {"marker": "pot"}},
+		Blocks:        blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")),
+		BlockEntities: map[dispatcher.CellPos]nbt.Compound{{2, 1, 0}: {"marker": "pot"}},
 	}
 	input.Blocks.Set(layout.Index(2, 1, 0), ir.IRBlock(`minecraft:decorated_pot ["cracked"="false","facing"="east","waterlogged"="true"]`))
 	input.Blocks.Set(layout.Index(0, 2, 1), ir.IRBlock("minecraft:enchanting_table []"))
@@ -131,7 +131,7 @@ func BenchmarkIsolatedWaterloggedBlock(b *testing.B) {
 	for _, side := range []int{1, 16} {
 		b.Run(fmt.Sprint(side), func(b *testing.B) {
 			layout := cube.New(side)
-			pipeline := dispatcher.NewPipeline(layout, resources.Tables, effector.New(nil), blockactor.New(), nil)
+			pipeline := dispatcher.NewPipeline(layout, resources.Tables, effector.New(nil), blockactor.New(), nil, nil)
 			blocks := blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []"))
 			blocks.Set(0, ir.IRBlock(`minecraft:oak_leaves ["distance"="1","persistent"="true","waterlogged"="true"]`))
 			input := dispatcher.Section{Blocks: blocks}

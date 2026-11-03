@@ -2,6 +2,7 @@ package tablegen
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"maps"
 	"os"
@@ -27,6 +28,18 @@ func TestPersistedTablesMatchBuild(t *testing.T) {
 	}
 	want, err := builder.Build()
 	if err != nil {
+		t.Fatal(err)
+	}
+	items, err := builder.BuildItems(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var itemBytes bytes.Buffer
+	compressed := gzip.NewWriter(&itemBytes)
+	if err := json.NewEncoder(compressed).Encode(items); err != nil {
+		t.Fatal(err)
+	}
+	if err := compressed.Close(); err != nil {
 		t.Fatal(err)
 	}
 	var solidBytes bytes.Buffer
@@ -61,6 +74,9 @@ func TestPersistedTablesMatchBuild(t *testing.T) {
 	if err := os.WriteFile(path+".java.json", metadata, 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(path+".items.json.gz", itemBytes.Bytes(), 0644); err != nil {
+		t.Fatal(err)
+	}
 	for _, check := range []struct {
 		Name string
 		Path string
@@ -73,6 +89,9 @@ func TestPersistedTablesMatchBuild(t *testing.T) {
 			resolver, err := blockmesh.Open(blockmesh.OpenOptions{TablesPath: check.Path})
 			if err != nil {
 				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(resolver.Items, items) {
+				t.Fatal("static item catalog differs")
 			}
 			got := resolver.Tables
 			// 空切片与 nil 的查询语义相同，按元素比较。

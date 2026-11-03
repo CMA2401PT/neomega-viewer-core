@@ -21,11 +21,11 @@ func TestSingleBlockScenes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pipeline, err := javapreset.NewPipeline(cube.New(1), resources.Tables, nil)
+	pipeline, err := javapreset.NewPipeline(cube.New(1), resources.Tables, resources.Items, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	paddedPipeline, err := javapreset.NewPipeline(cube.New(16), resources.Tables, nil)
+	paddedPipeline, err := javapreset.NewPipeline(cube.New(16), resources.Tables, resources.Items, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +35,8 @@ func TestSingleBlockScenes(t *testing.T) {
 			blocks := blockdata.Uniform(1, scene.State.Tidy())
 			result, err := pipeline.Build(
 				dispatcher.Section{
-					Blocks:   blocks,
-					Entities: map[dispatcher.CellPos]nbt.Compound{{0, 0, 0}: scene.NBT},
+					Blocks:        blocks,
+					BlockEntities: map[dispatcher.CellPos]nbt.Compound{{0, 0, 0}: scene.NBT},
 				},
 				dispatcher.Neighbours{},
 				dispatcher.Options{},
@@ -51,7 +51,7 @@ func TestSingleBlockScenes(t *testing.T) {
 			padded := blockdata.Uniform(4096, ir.IRBlock("minecraft:air []"))
 			padded.Set(0, scene.State.Tidy())
 			legacy, err := paddedPipeline.Build(
-				dispatcher.Section{Blocks: padded, Entities: map[dispatcher.CellPos]nbt.Compound{{}: scene.NBT}},
+				dispatcher.Section{Blocks: padded, BlockEntities: map[dispatcher.CellPos]nbt.Compound{{}: scene.NBT}},
 				dispatcher.Neighbours{},
 				dispatcher.Options{},
 			)
@@ -82,7 +82,7 @@ func TestSingleBlockScenes(t *testing.T) {
 				wet := scene.State.States().Set("waterlogged", "true")
 				wetState := ir.IRBlock(scene.State.NameWithNameSpace() + " " + string(wet)).Tidy()
 				wetResult, err := pipeline.Build(
-					dispatcher.Section{Blocks: blockdata.Uniform(1, wetState), Entities: map[dispatcher.CellPos]nbt.Compound{{}: scene.NBT}},
+					dispatcher.Section{Blocks: blockdata.Uniform(1, wetState), BlockEntities: map[dispatcher.CellPos]nbt.Compound{{}: scene.NBT}},
 					dispatcher.Neighbours{},
 					dispatcher.Options{},
 				)

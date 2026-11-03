@@ -21,14 +21,14 @@ func TestSignPipelineWaterAndSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	layout := cube.New(2)
-	pipeline, err := javapreset.NewPipeline(layout, preset.Tables, nil)
+	pipeline, err := javapreset.NewPipeline(layout, preset.Tables, preset.Items, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	state := ir.IRBlock(`minecraft:oak_sign ["rotation"="0","waterlogged"="true"]`).Tidy()
 	section := dispatcher.Section{
 		Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")),
-		Entities: map[dispatcher.CellPos]nbt.Compound{
+		BlockEntities: map[dispatcher.CellPos]nbt.Compound{
 			{0, 1, 0}: {"front_text": map[string]any{"messages": []string{"你好 Java"}, "has_glowing_text": int8(1)}},
 			{1, 1, 0}: {"front_text": map[string]any{"color": "invalid"}},
 		},
@@ -89,16 +89,16 @@ func TestBannerPipelineAndFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	layout := cube.New(3)
-	pipeline, err := javapreset.NewPipeline(layout, preset.Tables, nil)
+	pipeline, err := javapreset.NewPipeline(layout, preset.Tables, preset.Items, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	section := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")), Entities: map[dispatcher.CellPos]nbt.Compound{}}
+	section := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")), BlockEntities: map[dispatcher.CellPos]nbt.Compound{}}
 	for x := 0; x < 3; x++ {
 		section.Blocks.Set(layout.Index(x, 1, 1), ir.IRBlock(`minecraft:white_banner ["rotation"="0"]`))
-		section.Entities[dispatcher.CellPos{uint8(x), 1, 1}] = nbt.Compound{"patterns": []any{map[string]any{"pattern": "minecraft:cross", "color": "red"}}}
+		section.BlockEntities[dispatcher.CellPos{uint8(x), 1, 1}] = nbt.Compound{"patterns": []any{map[string]any{"pattern": "minecraft:cross", "color": "red"}}}
 	}
-	section.Entities[dispatcher.CellPos{1, 1, 1}] = nbt.Compound{"patterns": []any{map[string]any{"pattern": "minecraft:missing", "color": "red"}}}
+	section.BlockEntities[dispatcher.CellPos{1, 1, 1}] = nbt.Compound{"patterns": []any{map[string]any{"pattern": "minecraft:missing", "color": "red"}}}
 	result, err := pipeline.Build(section, dispatcher.Neighbours{}, dispatcher.Options{})
 	if err != nil {
 		t.Fatal(err)

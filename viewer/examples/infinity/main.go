@@ -23,10 +23,11 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// 2. Java 预设组装书本、陶罐和旗帜，处理器自行加载各自内嵌的图片。
+	// 2. Java 预设组装方块实体和展示框处理器，处理器自行加载各自内嵌的图片。
 	// layout 在 world.go 中固定为 cube.New(16)，数据来源和构建器共用它。
 	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
-	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
+	// Items 提供展示框所用的普通物品几何，必须与 Tables 使用同一套图集。
+	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, resources.Items, nil)
 	if err != nil {
 		log.Fatal(err)
 	}

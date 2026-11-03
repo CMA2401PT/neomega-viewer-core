@@ -11,6 +11,8 @@ type Resolved struct {
 	Builtin  ResourceID
 	Elements []Element
 	Textures map[string]TextureBinding
+	// 子模型按展示上下文覆盖父模型，未声明的上下文继续继承。
+	Display map[string]Transform
 }
 
 // Resolver caches immutable inherited models. The supplied catalog must remain
@@ -42,7 +44,7 @@ func (resolver *Resolver) resolve(id ResourceID, visiting map[ResourceID]bool) (
 	}
 	visiting[id] = true
 	defer delete(visiting, id)
-	result := &Resolved{Textures: map[string]TextureBinding{}}
+	result := &Resolved{Textures: map[string]TextureBinding{}, Display: map[string]Transform{}}
 	if definition.Parent != "" {
 		parent, err := resolver.resolve(definition.Parent, visiting)
 		if err != nil {
@@ -51,6 +53,12 @@ func (resolver *Resolver) resolve(id ResourceID, visiting map[ResourceID]bool) (
 		result.Builtin = parent.Builtin
 		result.Elements = parent.Elements
 		result.Textures = maps.Clone(parent.Textures)
+		for context, transform := range parent.Display {
+			result.Display[context] = transform
+		}
+	}
+	for context, transform := range definition.Display {
+		result.Display[context] = transform
 	}
 	for name, binding := range definition.Textures {
 		result.Textures[name] = binding

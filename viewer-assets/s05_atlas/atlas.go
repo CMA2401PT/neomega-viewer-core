@@ -69,6 +69,17 @@ func Run(ctx context.Context, opt Options) (*jmodel.Atlas, error) {
 	for _, id := range report.RequiredTextures {
 		selected[id] = true
 	}
+	models, err := jsonfile.Read[jmodel.Models](filepath.Join(opt.ModelDir, "models.json"))
+	if err != nil {
+		return nil, err
+	}
+	items, err := staticItems(snapshot, opt.InputDir, models, selected)
+	if err != nil {
+		return nil, err
+	}
+	if err := jsonfile.Write(filepath.Join(opt.OutputDir, "items.json"), items); err != nil {
+		return nil, err
+	}
 	ids := make([]jmodel.ResourceID, 0, len(selected))
 	for id := range selected {
 		ids = append(ids, id)
