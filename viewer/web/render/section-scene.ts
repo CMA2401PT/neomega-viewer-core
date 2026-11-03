@@ -9,7 +9,6 @@ import { OcclusionQueries, type OcclusionTarget } from "./occlusion.ts";
 
 // Small spatial batches retain independent section visibility and lifetime.
 export const REGION_SECTIONS = 4;
-const REGION_SIZE = REGION_SECTIONS * 16;
 const REGION_CAPACITY = REGION_SECTIONS ** 3;
 const capacity = (count: number): number => 2 ** Math.ceil(Math.log2(Math.max(256, count)));
 
@@ -75,7 +74,7 @@ class RegionBatch {
   private indexCapacity: number;
   private fragmented = false;
 
-  constructor(draw: Draw) {
+  constructor(draw: Draw, regionSize: number) {
     this.vertexCapacity = capacity(draw.geometry.getAttribute("position").count);
     this.indexCapacity = capacity(draw.geometry.index!.count);
     this.mesh = new THREE.BatchedMesh(
@@ -92,8 +91,8 @@ class RegionBatch {
     this.mesh.sortObjects = false;
     // Used only for render-list sorting, not visibility (which uses actual bounds).
     this.mesh.boundingSphere = new THREE.Sphere(
-      new THREE.Vector3().setScalar(REGION_SIZE / 2),
-      Math.sqrt(3) * REGION_SIZE / 2,
+      new THREE.Vector3().setScalar(regionSize / 2),
+      Math.sqrt(3) * regionSize / 2,
     );
   }
 
@@ -155,6 +154,8 @@ export class SectionScene {
   private readonly scene: THREE.Scene;
   private readonly atlas: THREE.Texture;
   private readonly effects: EffectRegistry;
+  private readonly sectionSize: number;
+  private readonly regionSize: number;
   private wireframe = false;
   private occlusionEnabled = true;
 
@@ -163,7 +164,11 @@ export class SectionScene {
     atlas: THREE.Texture,
     effects: EffectRegistry,
     renderer?: THREE.WebGLRenderer,
+    sectionSize: number = 16,
   ) {
+    // 同一场景使用固定 N³，坐标约定由宿主提供，不从每份快照推断。
+    this.sectionSize = sectionSize;
+    this.regionSize = REGION_SECTIONS * sectionSize;
     this.scene = scene;
     this.atlas = atlas;
     this.effects = effects;
@@ -241,7 +246,7 @@ export class SectionScene {
         + (geometry.index?.array.byteLength ?? 0)
       );
     }
-    section.bounds.translate(new THREE.Vector3(key.x * 16, key.y * 16, key.z * 16));
+    section.bounds.translate(new THREE.Vector3(key.x * this.sectionSize, key.y * this.sectionSize, key.z * this.sectionSize));
     return section;
   }
 
@@ -250,9 +255,9 @@ export class SectionScene {
     this.occlusion?.invalidate();
     const { key } = section;
     const origin = new THREE.Vector3(
-      Math.floor(key.x / REGION_SECTIONS) * REGION_SIZE,
-      Math.floor(key.y / REGION_SECTIONS) * REGION_SIZE,
-      Math.floor(key.z / REGION_SECTIONS) * REGION_SIZE,
+      Math.floor(key.x / REGION_SECTIONS) * this.regionSize,
+      Math.floor(key.y / REGION_SECTIONS) * this.regionSize,
+      Math.floor(key.z / REGION_SECTIONS) * this.regionSize,
     );
     const id = origin.toArray().join(",");
     let region = this.regions.get(id);
@@ -264,12 +269,12 @@ export class SectionScene {
       region = { id, group, bounds: new THREE.Box3(), entries: new Map(), batches: new Map(), dirtyBounds: false };
       this.regions.set(id, region);
     }
-    const offset = new THREE.Vector3(key.x * 16, key.y * 16, key.z * 16).sub(origin);
+    const offset = new THREE.Vector3(key.x * this.sectionSize, key.y * this.sectionSize, key.z * this.sectionSize).sub(origin);
     const entry: Entry = { section, instances: [], visible: true };
     for (const draw of section.opaque) {
       let batch = region.batches.get(draw.material);
       if (!batch) {
-        batch = new RegionBatch(draw);
+        batch = new RegionBatch(draw, this.regionSize);
         region.batches.set(draw.material, batch);
         region.group.add(batch.mesh);
         batch.mesh.updateMatrixWorld(true);

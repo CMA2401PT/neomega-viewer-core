@@ -6,15 +6,10 @@ NEMC，要经 `neomega-blocks` 的 NEMC→Java 转换才得到 Java 状态，这
 `false`。几何表按 hash 查形状，拿到的就是一段孤立的栅栏柱，渲染出来是错的。
 
 `fixer` 是独立的 Java 属性修正步骤，是否启用由调用者决定。
-`Fix(center Column, neighbours ChunkNeighbours) Column` 接收中心及八邻居的 Java 方块调色板。
+`Fix(Input)` 通过调用方提供的筛选遍历与坐标查询读取状态，返回「位置 → 新状态」。
 连接属性按邻居关系重算，门的属性从上下伙伴格补全。
-返回新的高度映射，有改动的调色板被复制，未改动的共享输入。
-
-单 section 预览使用
-`FixSection(section *layer_storage.Palette[ir.IRBlock], neighbours [6]*layer_storage.Palette[ir.IRBlock]) *layer_storage.Palette[ir.IRBlock]`。
-六面邻居顺序为 west/east/down/up/north/south。
-两个入口共用取格函数和 pass，内部直接处理 `ir.IRBlock`。
-viewer 在调用边界处理 hash 与状态的转换。
+固定 16³ 的存储寻址、整列与单 section 适配、复制和写回由应用层 `neomega-converter/fixpalette` 完成。
+core 不接收旧 Palette，也不规定数据如何分块。
 它只改方块状态，不碰几何，也不依赖几何运行时。
 状态属性通过 `ir.IRBlock` 查询与改写，属性表和实心表的 hash 查询使用 `neomega-blocks/presets/java/v1`。
 
@@ -47,17 +42,16 @@ viewer 在调用边界处理 hash 与状态的转换。
 
 一个 pass 由两部分组成：`cares` 只看一个完整状态，回答「这个方块归不归我修」；
 `run` 读中心柱子和邻居，返回「位置 → 新状态」的改动，自己不落笔。
-取格坐标的 x、z 相对中心区块原点，y 是世界绝对高度。
+坐标含义由输入约定，遍历和查询必须一致；世界适配使用相对中心区块的 x、z 与绝对高度 y。
 取格返回状态和数据是否存在的标记，缺失时返回空气与 false。
-两个入口把所有 pass 串起来，一轮收齐整根中心柱子的改动后统一应用，下一轮才看得到上一轮的结果。这样每个 pass 内部永远在读一个一致的
+驱动把所有 pass 串起来，一轮收齐整根中心柱子的改动后统一应用，下一轮才看得到上一轮的结果。这样每个 pass 内部永远在读一个一致的
 快照，不会出现「同一轮里 A 格改了、B 格读到的是 A 的新值还是旧值」这种顺序依赖。邻居
 层在整个过程里始终是调用者传入的原始快照，不随 pass 变化。
 
-需要修的方块很少：在一份 19 万根柱子的真实存档里，只有约 5% 的 section 含有任何一个 pass 关心的方块。
-所以每个 pass 运行前，驱动先用 `cares` 把中心每个 section 的调色板条目问一遍，记下哪些调色板索引是目标。
-没有目标的 section 不交给这个 pass，整根柱子都没有目标就跳过这个 pass；有目标的 section 里，pass 也只拿到命中的格子。
-判断按调色板做，不逐格做，每个 pass 前重新算，因为上一个 pass 可能已经改了状态。
-树叶 pass 的 `cares` 同时包含原木：原木是距离的起点，常常独占树叶下方的另一个 section。
+驱动先按状态缓存默认属性补全与目标判断，再通过输入的筛选遍历收集候选格。
+存储适配可以先检查调色板，没有命中项的区域不必展开。
+每个 pass 前按候选格的最新状态重新筛选，没有目标就跳过该 pass。
+树叶 pass 同时选择原木，因为原木是距离传播的起点。
 
 加一类新修复，就写一对 `cares` 和 `run` 函数，在 `New()` 的 `f.passes` 列表里登记。`run` 内部用 `view.targetBlocks()` 遍历驱动已筛选的目标格，无需再次指定筛选函数。列表顺序就是
 执行顺序。

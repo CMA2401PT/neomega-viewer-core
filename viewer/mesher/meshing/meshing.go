@@ -1,14 +1,18 @@
-// Package meshing removes covered boundary faces and joins compatible rectangles
-// in a section of already baked, cell-local geometry.
+// Package meshing 按固定区域布局摆放共享几何、剔除遮挡面，并合并相容矩形。
 package meshing
 
 import (
+	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher/geometry"
 )
 
-const Size = 16
+// Builder 使用固定尺寸处理所有输入和邻居，调用之间不共享可变缓存。
+type Builder struct{ layout cube.Layout }
+
+// New 固定几何构建的坐标布局，输入格数应为 layout.Len()。
+func New(layout cube.Layout) *Builder { return &Builder{layout: layout} }
 
 type LayerShape struct {
 	// 层号属于摆放位置，嵌入引用可保持共享几何只读。
@@ -18,23 +22,11 @@ type LayerShape struct {
 
 type Cell []LayerShape
 
-// Cells uses (x<<8)|(z<<4)|y indexing. Mesh coordinates remain local to a cell.
-type Cells [Size * Size * Size]Cell
+// Cells 按构建器的 X-Z-Y 顺序排列，几何仍位于各自的格内坐标。
+type Cells []Cell
 
-// Boundaries holds the touching face of each adjacent section, ordered west,
-// east, down, up, north, south. Each face uses BoundaryIndex for its 256 cells.
-type Boundaries [6][Size * Size]Cell
-
-func BoundaryIndex(side int, p [3]int) int {
-	switch side / 2 {
-	case 0:
-		return p[2]*Size + p[1]
-	case 1:
-		return p[0]*Size + p[2]
-	default:
-		return p[0]*Size + p[1]
-	}
-}
+// Boundaries 保存六个邻接面，每个已提供的面有 N² 格；nil 面表示空气。
+type Boundaries [6][]Cell
 
 type Options struct {
 	Neighbours     *Boundaries
@@ -50,11 +42,9 @@ type Stats struct {
 	OutputQuads  int `json:"outputQuads"`
 }
 
-// Build never mutates cells or their shared mesh slices. RemovedQuads counts
-// fully hidden source quads; ClippedQuads counts partially hidden source quads.
-// VisibleQuads counts the remaining pieces before optional greedy merging.
-func Build(cells *Cells, options Options) (geometry.Mesh, Stats) {
-	quads, stats := cullAndPlace(cells, options.DisableCulling, options.Neighbours)
+// Build 只读输入与共享形状，返回区域网格及剔面、裁切和合并统计。
+func (b *Builder) Build(cells Cells, options Options) (geometry.Mesh, Stats) {
+	quads, stats := b.cullAndPlace(cells, options.DisableCulling, options.Neighbours)
 	stats.VisibleQuads = len(quads)
 	if !options.DisableGreedy {
 		quads = merge(quads)
@@ -63,12 +53,13 @@ func Build(cells *Cells, options Options) (geometry.Mesh, Stats) {
 	return geometry.Mesh{Quads: quads}, stats
 }
 
-func cullAndPlace(cells *Cells, disableCulling bool, neighbours *Boundaries) ([]geometry.Quad, Stats) {
+func (b *Builder) cullAndPlace(cells Cells, disableCulling bool, neighbours *Boundaries) ([]geometry.Quad, Stats) {
 	quads := []geometry.Quad{}
 	stats := Stats{}
-	cull := culler{shapes: make(map[*geometry.Shape]*inspectedShape)}
+	cull := culler{layout: b.layout, shapes: make(map[*geometry.Shape]*inspectedShape)}
 	for index, cell := range cells {
-		position := [3]int{index >> 8, index & 15, (index >> 4) & 15}
+		pos := b.layout.Position(index)
+		position := [3]int{int(pos[0]), int(pos[1]), int(pos[2])}
 		for _, part := range cell {
 			scale := cull.layerScale(cell, part.Layer)
 			var info *inspectedShape
@@ -129,8 +120,6 @@ func place(quad geometry.Quad, position [3]int, scale float64) geometry.Quad {
 }
 
 var sideNames = [6]string{"west", "east", "down", "up", "north", "south"}
-
-func cellIndex(p [3]int) int { return (p[0] << 8) | (p[2] << 4) | p[1] }
 
 func occludes(cover, candidate geometry.Quad, coverGroup, candidateGroup uint32) bool {
 	if material.FullyOpaque(cover.Surface) {

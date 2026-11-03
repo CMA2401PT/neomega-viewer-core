@@ -3,8 +3,8 @@ package fixer
 import (
 	"testing"
 
-	"celler/layer_storage"
 	"neomega-blocks/ir"
+	"neomega-viewer-core/viewer/blockdata"
 )
 
 func TestChunkDoorsAndOwnership(t *testing.T) {
@@ -20,17 +20,17 @@ func TestChunkDoorsAndOwnership(t *testing.T) {
 			"half": half, "facing": "east", "hinge": "right", "open": "true", "powered": "true",
 		})
 	}
-	lowerPos, upperPos := layer_storage.At(4, 15, 9), layer_storage.At(4, 0, 9)
+	lowerPos, upperPos := localIndex(4, 15, 9), localIndex(4, 0, 9)
 	lowerBefore, upperBefore := roundtripDoorBlock(t, original[0]), roundtripDoorBlock(t, original[1])
 	lower.Set(lowerPos, lowerBefore)
 	upper.Set(upperPos, upperBefore)
 	untouched := palette(airChunk(t))
 	center :=
-		map[int32]*layer_storage.Palette[ir.IRBlock]{
+		map[int32]*blockdata.Blocks{
 			-1: lower, 0: upper, 2: untouched,
 		}
 
-	fixed := f.Fix(center, ChunkNeighbours{})
+	fixed := fixColumn(f, center, ChunkNeighbours{})
 	assertDoorRestored(t, fixed[-1].Get(lowerPos), original[0], lowerBefore)
 	assertDoorRestored(t, fixed[0].Get(upperPos), original[1], upperBefore)
 	assertBlock(t, lower.Get(lowerPos), lowerBefore)
@@ -52,10 +52,10 @@ func TestChunkNeighbourCoordinates(t *testing.T) {
 	names := [8]string{"stone", "dirt", "cobblestone", "gold_block", "iron_block", "diamond_block", "emerald_block", "sand"}
 	for side, pos := range positions {
 		blocks := palette(airChunk(t))
-		blocks.Set(layer_storage.At(pos.x, pos.y, pos.z), stateBlock(t, names[side], nil))
-		neighbours[side] = map[int32]*layer_storage.Palette[ir.IRBlock]{-2: blocks}
+		blocks.Set(localIndex(pos.x, pos.y, pos.z), stateBlock(t, names[side], nil))
+		neighbours[side] = map[int32]*blockdata.Blocks{-2: blocks}
 	}
-	center := map[int32]*layer_storage.Palette[ir.IRBlock]{-2: palette(airChunk(t))}
+	center := map[int32]*blockdata.Blocks{-2: palette(airChunk(t))}
 	f := &Fixer{passes: []pass{
 		{
 			cares: func(ir.IRBlock) bool { return true },
@@ -81,7 +81,7 @@ func TestChunkNeighbourCoordinates(t *testing.T) {
 			},
 		},
 	}}
-	fixed := f.Fix(center, neighbours)
+	fixed := fixColumn(f, center, neighbours)
 	if fixed[-2] != center[-2] {
 		t.Fatal("unchanged chunk must retain its section")
 	}
@@ -97,26 +97,26 @@ func TestChunkRedstoneAcrossTwoAxes(t *testing.T) {
 		"power": "11", "north": "up", "east": "up", "south": "up", "west": "up",
 	})
 	blocks := palette(airChunk(t))
-	blocks.Set(layer_storage.At(0, 15, 8), wire)
-	blocks.Set(layer_storage.At(1, 15, 8), wire)
-	center := map[int32]*layer_storage.Palette[ir.IRBlock]{
+	blocks.Set(localIndex(0, 15, 8), wire)
+	blocks.Set(localIndex(1, 15, 8), wire)
+	center := map[int32]*blockdata.Blocks{
 		0: blocks, 1: palette(airChunk(t)),
 	}
-	west := map[int32]*layer_storage.Palette[ir.IRBlock]{
+	west := map[int32]*blockdata.Blocks{
 		0: palette(airChunk(t)), 1: palette(airChunk(t)),
 	}
 	neighbours := ChunkNeighbours{W: west}
-	fixed := f.Fix(center, neighbours)
+	fixed := fixColumn(f, center, neighbours)
 	want := stateBlock(t, "redstone_wire", map[string]string{
 		"power": "11", "north": "none", "east": "side", "south": "none", "west": "side",
 	})
-	assertBlock(t, fixed[0].Get(layer_storage.At(0, 15, 8)), want)
-	assertBlock(t, blocks.Get(layer_storage.At(0, 15, 8)), wire)
-	west[1].Set(layer_storage.At(15, 0, 8), wire)
-	fixed = f.Fix(center, neighbours)
-	assertBlock(t, fixed[0].Get(layer_storage.At(0, 15, 8)), wire)
-	assertBlock(t, west[1].Get(layer_storage.At(15, 0, 8)), wire)
+	assertBlock(t, fixed[0].Get(localIndex(0, 15, 8)), want)
+	assertBlock(t, blocks.Get(localIndex(0, 15, 8)), wire)
+	west[1].Set(localIndex(15, 0, 8), wire)
+	fixed = fixColumn(f, center, neighbours)
+	assertBlock(t, fixed[0].Get(localIndex(0, 15, 8)), wire)
+	assertBlock(t, west[1].Get(localIndex(15, 0, 8)), wire)
 	delete(west, 1)
-	fixed = f.Fix(center, neighbours)
-	assertBlock(t, fixed[0].Get(layer_storage.At(0, 15, 8)), wire)
+	fixed = fixColumn(f, center, neighbours)
+	assertBlock(t, fixed[0].Get(localIndex(0, 15, 8)), wire)
 }

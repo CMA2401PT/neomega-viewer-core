@@ -8,15 +8,19 @@ import (
 	"log"
 	"net/http"
 
-	"celler/layer_storage"
 	"neomega-blocks/ir"
 	nbt "neomega-nbt/presets/v1"
+	"neomega-viewer-core/viewer/blockdata"
+	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/dispatcher"
 	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
 	"neomega-viewer-core/viewer/merger"
 	preset "neomega-viewer-core/viewer/resources"
 	viewassets "neomega-viewer-core/viewer/resources"
 )
+
+// 示例中的所有输入共用这一个 16³ 坐标约定。
+var layout = cube.New(16)
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:2414", "HTTP listen address")
@@ -34,7 +38,7 @@ func main() {
 	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
 		log.Fatal(err)
 	}
-	pipeline := dispatcher.NewJavaPipeline(resources.Tables, &atlas, nil)
+	pipeline := dispatcher.NewJavaPipeline(layout, resources.Tables, &atlas, nil)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/subchunk", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("subchunk") != "default" {
@@ -78,11 +82,11 @@ func defaultSubchunk() dispatcher.Section {
 	spruce := ir.IRBlock("minecraft:spruce_planks []")
 	glass := ir.IRBlock("minecraft:glass []")
 	section := dispatcher.Section{
-		Blocks:   layer_storage.MakePaletteStorage(air),
+		Blocks:   blockdata.Uniform(layout.Len(), air),
 		Entities: map[dispatcher.CellPos]nbt.Compound{},
 	}
 	set := func(x, y, z int, state ir.IRBlock) {
-		section.Blocks.Set(layer_storage.At(x, y, z), state)
+		section.Blocks.Set(layout.Index(x, y, z), state)
 	}
 	for x := 2; x < 14; x++ {
 		for z := 2; z < 14; z++ {

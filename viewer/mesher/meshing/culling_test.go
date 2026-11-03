@@ -59,11 +59,11 @@ func TestBuildInspectionLifetimeAndConcurrentInputs(t *testing.T) {
 	cover := &geometry.Shape{Quads: []geometry.Quad{face(0, -1, 0, [2]float64{}, [2]float64{.5, 1}, opaque)}}
 	source.Boundary = blockgeometry.BoundaryCoverage(source.Quads)
 	cover.Boundary = blockgeometry.BoundaryCoverage(cover.Quads)
-	var cells Cells
+	cells := make(Cells, 4096)
 	cells[0] = Cell{{Shape: source}}
 	cells[256] = Cell{{Shape: cover}}
 	options := Options{DisableGreedy: true}
-	before, beforeStats := Build(&cells, options)
+	before, beforeStats := New(testLayout).Build(cells, options)
 	if len(before.Quads) != 1 || beforeStats.ClippedQuads != 1 {
 		t.Fatalf("expected one partially clipped source face: %+v", beforeStats)
 	}
@@ -80,7 +80,7 @@ func TestBuildInspectionLifetimeAndConcurrentInputs(t *testing.T) {
 	var workers sync.WaitGroup
 	for range 4 {
 		workers.Go(func() {
-			got, stats := Build(&cells, options)
+			got, stats := New(testLayout).Build(cells, options)
 			if !reflect.DeepEqual(got, want) || stats != beforeStats {
 				t.Errorf("independent Build changed geometry or stats: %+v", stats)
 			}
@@ -99,7 +99,7 @@ func BenchmarkSharedShapeCulling(b *testing.B) {
 	slab.Boundary = blockgeometry.BoundaryCoverage(slab.Quads)
 	for _, name := range []string{"solid", "partial"} {
 		b.Run(name, func(b *testing.B) {
-			var cells Cells
+			cells := make(Cells, 4096)
 			for i := range cells {
 				shape := cube
 				if name == "partial" && i%3 == 0 {
@@ -110,7 +110,7 @@ func BenchmarkSharedShapeCulling(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for range b.N {
-				Build(&cells, Options{})
+				New(testLayout).Build(cells, Options{})
 			}
 		})
 	}

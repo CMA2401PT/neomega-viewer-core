@@ -4,9 +4,8 @@ import (
 	"maps"
 	"testing"
 
-	"celler"
-	"celler/layer_storage"
 	"neomega-blocks/ir"
+	"neomega-viewer-core/viewer/blockdata"
 )
 
 func TestFilteredPassesMatchFullScan(t *testing.T) {
@@ -33,24 +32,24 @@ func TestFilteredPassesMatchFullScan(t *testing.T) {
 			},
 		}
 	}
-	chunks := make(map[celler.ChunkPos]Column)
+	chunks := make(map[testChunkPos]Column)
 	for z := int32(-1); z <= 1; z++ {
 		for x := int32(-1); x <= 1; x++ {
-			pos := celler.ChunkPos{X: x, Z: z}
+			pos := testChunkPos{X: x, Z: z}
 			chunks[pos] = mixedTargetChunk(t, pos)
 		}
 	}
 	for pos, center := range chunks {
 		var neighbours ChunkNeighbours
 		for side, offset := range chunkOffsets {
-			neighbours[side] = chunks[celler.ChunkPos{
+			neighbours[side] = chunks[testChunkPos{
 				X: pos.X + int32(offset[0]), Z: pos.Z + int32(offset[1]),
 			}]
 		}
-		got, want := f.Fix(center, neighbours), full.Fix(center, neighbours)
+		got, want := fixColumn(f, center, neighbours), fixColumn(&full, center, neighbours)
 		for y, section := range got {
 			for index := range 4096 {
-				at := layer_storage.At(index>>8, index&15, index>>4&15)
+				at := localIndex(index>>8, index&15, index>>4&15)
 				if actual, expected := section.Get(at), want[y].Get(at); actual != expected {
 					t.Fatalf("chunk=%v section=%d at=%v: got %s, want %s", pos, y, at, actual, expected)
 				}
@@ -64,38 +63,29 @@ func TestFilteredPassesMatchFullScan(t *testing.T) {
 	}
 }
 
-func fullScanTargets(
-	view snapshot,
-	cares func(ir.IRBlock) bool,
-) (map[int32][]bool, map[position]ir.IRBlock) {
-	// 逐格判断作为独立对照，同时记录预期格子，验证索引迭代没有漏取或多取。
-	targets := make(map[int32][]bool)
+type testChunkPos struct{ X, Z int32 }
+
+func fullScanTargets(view snapshot, cares func(ir.IRBlock) bool) ([]target, map[position]ir.IRBlock) {
+	var targets []target
 	blocks := make(map[position]ir.IRBlock)
-	for y, section := range view.sections {
-		indices := make([]bool, section.LastPaletteIdx+1)
-		for index := range 4096 {
-			local := layer_storage.At(index>>8, index&15, index>>4&15)
-			block := section.Get(local)
-			if cares(block) {
-				indices[section.GetIndex(local)] = true
-				pos := position{x: int(local.X), y: int(y)*16 + int(local.Y), z: int(local.Z)}
-				blocks[pos] = block
-			}
+	for _, block := range view.targets {
+		if cares(block.state) {
+			targets = append(targets, block)
+			blocks[block.pos] = block.state
 		}
-		targets[y] = indices
 	}
 	return targets, blocks
 }
 
-func mixedTargetChunk(t *testing.T, pos celler.ChunkPos) Column {
+func mixedTargetChunk(t *testing.T, pos testChunkPos) Column {
 	// 原木独占底层；其余目标混在空气中，并穿过 section、柱子的边界。
 	t.Helper()
-	chunk := make(map[int32]*layer_storage.Palette[ir.IRBlock])
+	chunk := make(map[int32]*blockdata.Blocks)
 	for _, y := range []int32{-2, -1, 0, 1, 2, 4} {
 		chunk[y] = palette(airChunk(t))
 	}
 	put := func(x, y, z int, name string, states map[string]string) {
-		chunk[int32(y>>4)].Set(layer_storage.At(x, y, z), stateBlock(t, name, states))
+		chunk[int32(y>>4)].Set(localIndex(x, y, z), stateBlock(t, name, states))
 	}
 	put(8, -17, 8, "oak_log", nil)
 	for y := -16; y <= -12; y++ {
@@ -135,11 +125,11 @@ func mixedTargetChunk(t *testing.T, pos celler.ChunkPos) Column {
 	put(12, 15, 12, "note_block", nil)
 	put(12, 16, 12, "zombie_head", nil)
 	// 索引 0 也可能是目标，且单值调色板没有索引数组。
-	chunk[2] = layer_storage.MakePaletteStorage(stateBlock(t, "kelp", nil))
+	chunk[2] = blockdata.Uniform(4096, stateBlock(t, "kelp", nil))
 	if pos.X == 0 {
 		put(0, 32, 0, "stone", nil)
 	}
-	chunk[4] = layer_storage.MakePaletteStorage(stateBlock(t, "stone", nil))
+	chunk[4] = blockdata.Uniform(4096, stateBlock(t, "stone", nil))
 	return chunk
 }
 
@@ -149,16 +139,16 @@ func TestFixWithoutTargetsSharesAllPalettes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	center := make(map[int32]*layer_storage.Palette[ir.IRBlock])
+	center := make(map[int32]*blockdata.Blocks)
 	for index, name := range []string{"air", "stone", "mushroom_stem", "oak_fence_gate"} {
 		center[int32(index-2)] =
-			layer_storage.MakePaletteStorage(stateBlock(t, name, nil))
+			blockdata.Uniform(4096, stateBlock(t, name, nil))
 
 	}
 	blocks := center[0]
-	blocks.Set(layer_storage.At(1, 2, 3), stateBlock(t, "fire", nil))
-	blocks.Set(layer_storage.At(1, 2, 3), stateBlock(t, "mushroom_stem", nil))
-	fixed := f.Fix(center, ChunkNeighbours{})
+	blocks.Set(localIndex(1, 2, 3), stateBlock(t, "fire", nil))
+	blocks.Set(localIndex(1, 2, 3), stateBlock(t, "mushroom_stem", nil))
+	fixed := fixColumn(f, center, ChunkNeighbours{})
 	for y, section := range center {
 		if fixed[y] != section {
 			t.Fatalf("section %d palette copied without target blocks", y)
@@ -169,7 +159,7 @@ func TestFixWithoutTargetsSharesAllPalettes(t *testing.T) {
 func TestPassTargetsRefreshBetweenPasses(t *testing.T) {
 	// 后一轮必须看见新加入的状态索引；没有目标的 pass 不应被调用。
 	air, stone := stateBlock(t, "air", nil), stateBlock(t, "stone", nil)
-	blocks := layer_storage.MakePaletteStorage(air)
+	blocks := blockdata.Uniform(4096, air)
 	f := &Fixer{passes: []pass{
 		{
 			cares: func(block ir.IRBlock) bool { return block == air },
@@ -201,5 +191,5 @@ func TestPassTargetsRefreshBetweenPasses(t *testing.T) {
 			},
 		},
 	}}
-	f.FixSection(blocks, [6]*layer_storage.Palette[ir.IRBlock]{})
+	fixPalette(f, blocks, [6]*blockdata.Blocks{})
 }

@@ -125,6 +125,6 @@ Shape 的 ModelID 就是其记录序号，不另外存编号。每条记录开�
 
 ## Go 接口与 Java 演示数据
 
-`tables.Encode(w io.Writer)` 写出上述格式；`geometry.DecodeTables[B](r io.Reader)` 读取它。两者都返回 I/O 错误，文件或 embed 由调用者打开。viewer 的 `mesher.NewMesher(tables)` 持有只读表并提供 `MeshBlock(id)` 与 `MeshSubchunk(blocks, options)`，其中 blocks 为按 `(x<<8)|(z<<4)|y` 排列的 4096 个 ID 的切片。
+`tables.Encode(w io.Writer)` 写出上述格式；`geometry.DecodeTables[B](r io.Reader)` 读取它。两者都返回 I/O 错误，文件或 embed 由调用者打开。viewer 的 `mesher.NewMesher(layout, tables)` 持有只读表并提供 `MeshBlock(id)` 与 `MeshLayer(blocks, options)`，其中 `layout := cube.New(N)` 固定构建尺寸，blocks 为按 `(x*N+z)*N+y` 排列的 N³ 个 ID。
 
 仓库生成器以 uint32 的 Java hash 作为 block ID。Java 身份由 `neomega-blocks/presets/java/v1.JavaFullStates()` 提供。Java 查询所需的资源 Version、Renderers、Skipped 单独写入 `<表路径>.java.json`，其中 Skipped 记录 tidy IRBlock（Block）和 Reason。这个旁文件不属于 NVGT，独立使用 mesher 不需要它；预置加载器 `presets/java/v1/geometry` 加载它，方块身份通过 Java preset 的 HashToBlock 查询。两张几何表的全部内容都在 NVGT 二进制中。

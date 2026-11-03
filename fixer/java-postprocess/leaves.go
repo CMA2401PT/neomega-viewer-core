@@ -60,7 +60,7 @@ func (f *Fixer) leafDistances(view snapshot) map[position]ir.IRBlock {
 		if !covered {
 			distance = 7
 			// 边缘可能有区块外的原木，留到游戏加载后重算以免误掉落。
-			if pos.x <= 5 || pos.x >= 10 || pos.z <= 5 || pos.z >= 10 {
+			if pos.x < view.bounds.Min[0]+6 || pos.x >= view.bounds.Max[0]-6 || pos.z < view.bounds.Min[1]+6 || pos.z >= view.bounds.Max[1]-6 {
 				distance = 6
 			}
 		}

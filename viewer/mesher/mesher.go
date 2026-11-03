@@ -1,14 +1,19 @@
 package mesher
 
-import blockgeometry "neomega-viewer-core/viewer/geometry"
-import "neomega-viewer-core/viewer/mesher/geometry"
+import (
+	"neomega-viewer-core/viewer/cube"
+	blockgeometry "neomega-viewer-core/viewer/geometry"
+	"neomega-viewer-core/viewer/mesher/geometry"
+)
 
 type Mesher[B blockgeometry.BlockID] struct {
 	tables *blockgeometry.Tables[B]
+	layout cube.Layout
 }
 
-func NewMesher[B blockgeometry.BlockID](tables *blockgeometry.Tables[B]) *Mesher[B] {
-	return &Mesher[B]{tables: tables}
+// NewMesher 固定区域布局并引用只读几何表，所有层和邻居使用相同尺寸。
+func NewMesher[B blockgeometry.BlockID](layout cube.Layout, tables *blockgeometry.Tables[B]) *Mesher[B] {
+	return &Mesher[B]{tables: tables, layout: layout}
 }
 
 func (m *Mesher[B]) MeshBlock(id B) (geometry.Mesh, error) {

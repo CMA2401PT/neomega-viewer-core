@@ -47,12 +47,12 @@ func TestSubchunkPaddingAndUnknownHash(t *testing.T) {
 	for i := range blocks {
 		blocks[i] = stone
 	}
-	if got := splitter.SplitSubchunk(blocks); len(got) != 1 {
+	if got := splitter.SplitBlocks(blocks); len(got) != 1 {
 		t.Fatalf("single layer expanded to %d layers", len(got))
 	}
 	blocks[123], blocks[456] = kelp, unknown
 	original := slices.Clone(blocks)
-	layers := splitter.SplitSubchunk(blocks)
+	layers := splitter.SplitBlocks(blocks)
 	if len(layers) != 2 || len(layers[0]) != 4096 || len(layers[1]) != 4096 {
 		t.Fatalf("unexpected layer dimensions: %v", layers)
 	}

@@ -3,7 +3,6 @@ package fixer
 import (
 	"iter"
 
-	"celler/layer_storage"
 	"neomega-blocks/ir"
 	converts "neomega-blocks/presets/block-converts/v1"
 	java "neomega-blocks/presets/java/v1"
@@ -11,57 +10,38 @@ import (
 	javasolid "neomega-viewer-core/fixer/solidtable/preset"
 )
 
-// Column 按 section 高度保存 Java 方块调色板；输入及其调色板由调用方保持只读。
-type Column map[int32]*layer_storage.Palette[ir.IRBlock]
+// HorizontalBounds 按 X、Z 给出中心的水平范围，Min 包含、Max 不包含。
+// 树叶用它保守处理可能由区域外原木维持的格子。
+type HorizontalBounds struct{ Min, Max [2]int }
 
-type ChunkNeighbours [8]Column
-
-// 邻居保持转换后的原始状态，按 NW/N/NE/W/E/SW/S/SE 提供整根柱子。
-
-const (
-	NW = iota
-	N
-	NE
-	W
-	E
-	SW
-	S
-	SE
-)
-
-var chunkOffsets = [8][2]int{
-	NW: {-1, -1}, N: {0, -1}, NE: {1, -1}, W: {-1, 0},
-	E: {1, 0}, SW: {-1, 1}, S: {0, 1}, SE: {1, 1},
+// Input 将规则与存储分离。Blocks 仅遍历 accept 命中的中心格子，Get 查询中心及周围的原始数据。
+// Blocks 可按调色板预筛选；accept 只看状态，存储方不需要了解具体修复规则。
+// 缺失格必须返回空气和 false；整个调用期间输入保持不变。
+type Input struct {
+	Blocks func(accept func(ir.IRBlock) bool) iter.Seq2[[3]int, ir.IRBlock]
+	Get    func(x, y, z int) (ir.IRBlock, bool)
+	Bounds HorizontalBounds
 }
 
 type position struct{ x, y, z int }
-
-// 规则改动按方块定位，x、z 相对中心区块原点，y 为世界高度。
-
-type sectionKey struct{ x, y, z int }
-
-// 网格按 section 寻址，独立的键类型避免将 section 坐标当作方块坐标。
-
 type blockGetter func(x, y, z int) (ir.IRBlock, bool)
-
-// 缺数据时返回空气及 false，让红石规则保留无法排除坡道的状态。
-
+type target struct {
+	pos   position
+	state ir.IRBlock
+}
 type snapshot struct {
-	// 中心随 pass 更新，邻居保留输入原值；目标索引仅属于当前 pass。
-	sections map[int32]*layer_storage.Palette[ir.IRBlock]
-	get      blockGetter
-	solid    map[ir.IRBlock]uint8
-	targets  map[int32][]bool
+	get     blockGetter
+	solid   map[ir.IRBlock]uint8
+	targets []target
+	bounds  HorizontalBounds
 }
 
 type pass struct {
-	// 筛选由驱动统一完成，规则只接收当前轮目标，先收齐整根柱子的改动。
 	cares func(ir.IRBlock) bool
 	run   func(snapshot) map[position]ir.IRBlock
 }
 
 type Fixer struct {
-	// 规则和实心表只读共享，调用中的状态与缓存由各次修复独立持有。
 	solid  solidtable.Table
 	passes []pass
 }
@@ -88,50 +68,88 @@ func New() (*Fixer, error) {
 	return f, nil
 }
 
-func (f *Fixer) Fix(center Column, neighbours ChunkNeighbours) Column {
-	// 返回新的高度表，只复制实际改变的调色板；邻居始终保持输入原值。
-	sections := make(Column, len(center))
-	grid := make(map[sectionKey]*layer_storage.Palette[ir.IRBlock])
-	for y, palette := range center {
-		blocks := completePalette(palette)
-		sections[y] = blocks
-		grid[sectionKey{y: int(y)}] = blocks
+// Fix 返回中心格子的最终修改，输入和邻居均不写入；调用方决定如何保存修改。
+// 默认属性按状态缓存，规则逐轮看见中心的最新状态，邻居始终保持原始快照。
+func (f *Fixer) Fix(input Input) map[[3]int]ir.IRBlock {
+	completed := make(map[ir.IRBlock]ir.IRBlock)
+	complete := func(state ir.IRBlock) ir.IRBlock {
+		value, found := completed[state]
+		if !found {
+			value = completeBlock(state)
+			completed[state] = value
+		}
+		return value
 	}
-	for side, column := range neighbours {
-		offset := chunkOffsets[side]
-		for y, palette := range column {
-			grid[sectionKey{x: offset[0], y: int(y), z: offset[1]}] = completePalette(palette)
+	changes := make(map[[3]int]ir.IRBlock)
+	var candidates []position
+	relevant := make(map[ir.IRBlock]bool)
+	// 筛选允许存储方先检查调色板，整片无目标数据无需逐格展开。
+	accept := func(original ir.IRBlock) bool {
+		state := complete(original)
+		active, found := relevant[state]
+		if !found {
+			for _, pass := range f.passes {
+				active = active || pass.cares(state)
+			}
+			relevant[state] = active
+		}
+		return active || state != original
+	}
+	for pos, original := range input.Blocks(accept) {
+		state := complete(original)
+		if state != original {
+			changes[pos] = state
+		}
+		if relevant[state] {
+			candidates = append(candidates, position{pos[0], pos[1], pos[2]})
 		}
 	}
-	f.run(sections, grid)
-	return sections
+	view := snapshot{solid: make(map[ir.IRBlock]uint8), bounds: input.Bounds}
+	view.get = func(x, y, z int) (ir.IRBlock, bool) {
+		if state, found := changes[[3]int{x, y, z}]; found {
+			return state, true
+		}
+		state, found := input.Get(x, y, z)
+		return complete(state), found
+	}
+	for _, pass := range f.passes {
+		view.targets = view.targets[:0]
+		matches := make(map[ir.IRBlock]bool)
+		for _, pos := range candidates {
+			state, _ := view.get(pos.x, pos.y, pos.z)
+			active, found := matches[state]
+			if !found {
+				active = pass.cares(state)
+				matches[state] = active
+			}
+			if active {
+				view.targets = append(view.targets, target{pos, state})
+			}
+		}
+		if len(view.targets) == 0 {
+			continue
+		}
+		for pos, state := range pass.run(view) {
+			changes[[3]int{pos.x, pos.y, pos.z}] = state
+		}
+	}
+	for pos, state := range changes {
+		original, _ := input.Get(pos[0], pos[1], pos[2])
+		if state == original {
+			delete(changes, pos)
+		}
+	}
+	return changes
 }
 
-func (f *Fixer) FixSection(
-	section *layer_storage.Palette[ir.IRBlock],
-	neighbours [6]*layer_storage.Palette[ir.IRBlock],
-) *layer_storage.Palette[ir.IRBlock] {
-	// 单 section 预览使用局部高度，六面邻居按 west/east/down/up/north/south 排列。
-	section = completePalette(section)
-	sections := map[int32]*layer_storage.Palette[ir.IRBlock]{0: section}
-	grid := map[sectionKey]*layer_storage.Palette[ir.IRBlock]{{}: section}
-	for side, blocks := range neighbours {
-		if blocks != nil {
-			grid[sectionKey(sideOffset(side))] = completePalette(blocks)
+func (view snapshot) targetBlocks() iter.Seq2[position, ir.IRBlock] {
+	return func(yield func(position, ir.IRBlock) bool) {
+		for _, block := range view.targets {
+			if !yield(block.pos, block.state) {
+				return
+			}
 		}
 	}
-	f.run(sections, grid)
-	return sections[0]
-}
-
-func completePalette(blocks *layer_storage.Palette[ir.IRBlock]) *layer_storage.Palette[ir.IRBlock] {
-	// 仅在补全确实改变状态时复制，完整调色板可继续与调用方共享。
-	for _, block := range blocks.Palette[:blocks.LastPaletteIdx+1] {
-		if completeBlock(block) != block {
-			return layer_storage.ConvertPalette(blocks, completeBlock)
-		}
-	}
-	return blocks
 }
 
 func completeBlock(block ir.IRBlock) ir.IRBlock {
@@ -150,90 +168,6 @@ func completeBlock(block ir.IRBlock) ir.IRBlock {
 		completed = ir.IRBlock(completed.NameWithNameSpace() + " " + string(completed.States().Set("waterlogged", waterlogged)))
 	}
 	return completed.Tidy()
-}
-
-func (f *Fixer) run(
-	sections map[int32]*layer_storage.Palette[ir.IRBlock],
-	grid map[sectionKey]*layer_storage.Palette[ir.IRBlock],
-) {
-	// 每轮按最新中心调色板重新选目标；首次写入才复制，收齐改动后统一应用。
-	view := snapshot{sections: sections, get: getter(grid), solid: make(map[ir.IRBlock]uint8)}
-	owned := make(map[int32]bool)
-	for _, pass := range f.passes {
-		view.targets = selectTargets(sections, pass.cares)
-		if len(view.targets) == 0 {
-			continue
-		}
-		changes := pass.run(view)
-		for pos, state := range changes {
-			y := int32(pos.y >> 4)
-			if !owned[y] {
-				copy := &layer_storage.Palette[ir.IRBlock]{}
-				copy.CopyFrom(sections[y])
-				sections[y] = copy
-				grid[sectionKey{y: int(y)}] = copy
-				owned[y] = true
-			}
-			sections[y].Set(layer_storage.At(pos.x, pos.y, pos.z), state)
-		}
-	}
-}
-
-func selectTargets(
-	sections map[int32]*layer_storage.Palette[ir.IRBlock],
-	cares func(ir.IRBlock) bool,
-) map[int32][]bool {
-	// 同一完整状态跨 section 复用判断；每轮重建索引，避免沿用已改名或扩容的调色板。
-	targets := make(map[int32][]bool)
-	cache := make(map[ir.IRBlock]bool)
-	for y, section := range sections {
-		indices := make([]bool, section.LastPaletteIdx+1)
-		active := false
-		for index, block := range section.Palette[:section.LastPaletteIdx+1] {
-			matches, known := cache[block]
-			if !known {
-				matches = cares(block)
-				cache[block] = matches
-			}
-			indices[index] = matches
-			active = active || matches
-		}
-		if active {
-			targets[y] = indices
-		}
-	}
-	return targets
-}
-
-func getter(grid map[sectionKey]*layer_storage.Palette[ir.IRBlock]) blockGetter {
-	// 算术右移与低四位同时支持负高度和跨区块坐标，两个入口共用这条寻址路径。
-	return func(x, y, z int) (ir.IRBlock, bool) {
-		section := grid[sectionKey{x: x >> 4, y: y >> 4, z: z >> 4}]
-		if section == nil {
-			return "minecraft:air []", false
-		}
-		return section.Get(layer_storage.At(x, y, z)), true
-	}
-}
-
-func (view snapshot) targetBlocks() iter.Seq2[position, ir.IRBlock] {
-	// 只读取驱动为当前轮选出的目标，避免规则重复指定筛选条件。
-	return func(yield func(position, ir.IRBlock) bool) {
-		for y, indices := range view.targets {
-			section := view.sections[y]
-			for index := range 4096 {
-				local := layer_storage.At(index>>8, index&15, index>>4&15)
-				paletteIndex := section.GetIndex(local)
-				if !indices[paletteIndex] {
-					continue
-				}
-				pos := position{x: int(local.X), y: int(y)*16 + int(local.Y), z: int(local.Z)}
-				if !yield(pos, section.Palette[paletteIndex]) {
-					return
-				}
-			}
-		}
-	}
 }
 
 func (f *Fixer) faces(block ir.IRBlock, cache map[ir.IRBlock]uint8) uint8 {

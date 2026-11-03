@@ -71,8 +71,8 @@ func (s *Splitter) SplitHash(hash JavaBlockHash) []JavaBlockHashRSL {
 	return []JavaBlockHashRSL{hash}
 }
 
-func (s *Splitter) SplitSubchunk(blocks []JavaBlockHash) [][]JavaBlockHashRSL {
-	// 输入为 4096 格；输出按层排列，每层仍用 (x<<8)|(z<<4)|y 寻址。
+func (s *Splitter) SplitBlocks(blocks []JavaBlockHash) [][]JavaBlockHashRSL {
+	// 按输入顺序拆层，各输出层与输入等长，不解释空间尺寸。
 	// 层数由最深的格子决定，其余格子的缺层用 air 补齐。
 	layers := [][]JavaBlockHashRSL{}
 	for index, hash := range blocks {

@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"celler/layer_storage"
 	"neomega-blocks/ir"
 	nbt "neomega-nbt/presets/v1"
 	"neomega-viewer-core/viewer/blockactor"
+	"neomega-viewer-core/viewer/blockdata"
+	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/dispatcher"
 	"neomega-viewer-core/viewer/effector"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
@@ -19,7 +20,7 @@ import (
 )
 
 func section() dispatcher.Section {
-	return dispatcher.Section{Blocks: layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:air []"))}
+	return dispatcher.Section{Blocks: blockdata.Uniform(4096, ir.IRBlock("minecraft:air []"))}
 }
 
 func tables(t *testing.T) *blockgeometry.Tables[uint32] {
@@ -53,6 +54,7 @@ func (h *actorHandler) Build(input blockactor.Input) (geometry.Mesh, error) {
 func TestWaterloggedActorAndEffect(t *testing.T) {
 	handler := &actorHandler{}
 	pipeline := dispatcher.NewPipeline(
+		cube.New(16),
 		tables(t),
 		effector.New(map[string]string{"minecraft:enchanting_table": "enchanting_table_book"}),
 		blockactor.New(handler),
@@ -61,14 +63,14 @@ func TestWaterloggedActorAndEffect(t *testing.T) {
 	input := section()
 	pot := ir.IRBlock(`minecraft:decorated_pot ["cracked"="false","facing"="east","waterlogged"="true"]`)
 	futurePot := ir.IRBlock(pot.NameWithNameSpace() + " " + string(pot.States().Set("future", "yes"))).Tidy()
-	input.Blocks.Set(layer_storage.At(4, 5, 6), futurePot)
-	input.Blocks.Set(layer_storage.At(8, 5, 6), pot)
-	input.Blocks.Set(layer_storage.At(1, 2, 3), ir.IRBlock("minecraft:enchanting_table []"))
+	input.Blocks.Set(cube.New(16).Index(4, 5, 6), futurePot)
+	input.Blocks.Set(cube.New(16).Index(8, 5, 6), pot)
+	input.Blocks.Set(cube.New(16).Index(1, 2, 3), ir.IRBlock("minecraft:enchanting_table []"))
 	input.Entities = map[dispatcher.CellPos]nbt.Compound{
 		{4, 5, 6}: {"sherds": []string{"minecraft:brick"}},
 		{8, 5, 6}: {"fail": true},
 	}
-	before := input.Blocks.GetUsedPalette()
+	before := input.Blocks.Palette
 	result, err := pipeline.Build(input, dispatcher.Neighbours{}, dispatcher.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -98,21 +100,21 @@ func TestWaterloggedActorAndEffect(t *testing.T) {
 	if !water || !failedBody || successfulBody || !table {
 		t.Fatalf("water=%v failedBody=%v successfulBody=%v table=%v", water, failedBody, successfulBody, table)
 	}
-	if !reflect.DeepEqual(before, input.Blocks.GetUsedPalette()) || input.Blocks.Get(layer_storage.At(4, 5, 6)) != futurePot {
+	if !reflect.DeepEqual(before, input.Blocks.Palette) || input.Blocks.Get(cube.New(16).Index(4, 5, 6)) != futurePot {
 		t.Fatal("pipeline changed caller input")
 	}
 }
 
 func TestMissingDiagnosticsPreserveState(t *testing.T) {
 	missing := &blockgeometry.Shape{Quads: []geometry.Quad{{Color: [3]float32{1, 0, 1}}}}
-	pipeline := dispatcher.NewJavaPipeline(&blockgeometry.Tables[uint32]{
+	pipeline := dispatcher.NewJavaPipeline(cube.New(16), &blockgeometry.Tables[uint32]{
 		Index: map[uint32][]blockgeometry.ModelID{ir.IRBlock("minecraft:air []").Hash(): {}},
 	}, nil, missing)
 	input := section()
 	state := ir.IRBlock(`example:unknown ["waterlogged"="true"]`)
-	input.Blocks.Set(layer_storage.At(4, 5, 6), state)
+	input.Blocks.Set(cube.New(16).Index(4, 5, 6), state)
 	neighbour := section()
-	neighbour.Blocks.Set(layer_storage.At(15, 0, 0), ir.IRBlock("example:neighbour []"))
+	neighbour.Blocks.Set(cube.New(16).Index(15, 0, 0), ir.IRBlock("example:neighbour []"))
 	result, err := pipeline.Build(input, dispatcher.Neighbours{&neighbour}, dispatcher.Options{})
 	if err != nil || len(result.Diagnostics) != 1 {
 		t.Fatalf("missing report: %v %v", result, err)
@@ -121,7 +123,7 @@ func TestMissingDiagnosticsPreserveState(t *testing.T) {
 	if result.Diagnostics[0] != want {
 		t.Fatal(result.Diagnostics)
 	}
-	strict := dispatcher.NewJavaPipeline(tables(t), nil, nil)
+	strict := dispatcher.NewJavaPipeline(cube.New(16), tables(t), nil, nil)
 	if _, err := strict.Build(input, dispatcher.Neighbours{}, dispatcher.Options{}); err == nil {
 		t.Fatal("missing shape nil did not return error")
 	}
@@ -139,7 +141,7 @@ func (s *source) Section(ctx context.Context, pos dispatcher.SectionPos) (*dispa
 }
 
 func TestBuildSectionsCachesNeighbours(t *testing.T) {
-	pipeline := dispatcher.NewJavaPipeline(tables(t), nil, nil)
+	pipeline := dispatcher.NewJavaPipeline(cube.New(16), tables(t), nil, nil)
 	s := &source{
 		sections: map[dispatcher.SectionPos]*dispatcher.Section{},
 		calls:    map[dispatcher.SectionPos]int{},
@@ -147,7 +149,7 @@ func TestBuildSectionsCachesNeighbours(t *testing.T) {
 	positions := []dispatcher.SectionPos{{X: -2, Y: 3, Z: 4}, {X: -1, Y: 3, Z: 4}, {X: 10}}
 	for _, pos := range positions[:2] {
 		value := section()
-		value.Blocks = layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:stone []"))
+		value.Blocks = blockdata.Uniform(4096, ir.IRBlock("minecraft:stone []"))
 		s.sections[pos] = &value
 	}
 	results, err := pipeline.BuildSections(context.Background(), s, positions, dispatcher.Options{})
@@ -177,30 +179,13 @@ func TestBuildSectionsCachesNeighbours(t *testing.T) {
 
 func TestActorNeighboursDoNotOcclude(t *testing.T) {
 	handler := &actorHandler{names: []string{"minecraft:stone"}}
-	pipeline := dispatcher.NewPipeline(tables(t), effector.New(nil), blockactor.New(handler), nil)
+	pipeline := dispatcher.NewPipeline(cube.New(16), tables(t), effector.New(nil), blockactor.New(handler), nil)
 	input := section()
-	input.Blocks.Set(layer_storage.At(0, 0, 0), ir.IRBlock("minecraft:dirt []"))
+	input.Blocks.Set(cube.New(16).Index(0, 0, 0), ir.IRBlock("minecraft:dirt []"))
 	neighbour := section()
-	neighbour.Blocks.Set(layer_storage.At(15, 0, 0), ir.IRBlock(`minecraft:stone ["waterlogged"="true"]`))
+	neighbour.Blocks.Set(cube.New(16).Index(15, 0, 0), ir.IRBlock(`minecraft:stone ["waterlogged"="true"]`))
 	result, err := pipeline.Build(input, dispatcher.Neighbours{&neighbour}, dispatcher.Options{})
 	if err != nil || result.Stats.OutputQuads != 6 || len(handler.inputs) != 0 || len(result.Diagnostics) != 0 {
 		t.Fatalf("neighbour actor built or hid visible faces: %+v %v", result, err)
-	}
-}
-
-func TestBlocksFromHashes(t *testing.T) {
-	state := ir.IRBlock(`minecraft:oak_slab ["type"="bottom","waterlogged"="true"]`)
-	blocks := make([]uint32, 4096)
-	for i := range blocks {
-		blocks[i] = ir.IRBlock("minecraft:air []").Hash()
-	}
-	blocks[4<<8|6<<4|5] = state.Hash()
-	palette, err := dispatcher.BlocksFromHashes(blocks)
-	if err != nil || palette.Get(layer_storage.At(4, 5, 6)) != state {
-		t.Fatal("complete state not restored", err)
-	}
-	blocks[0] = ir.IRBlock("example:unknown []").Hash()
-	if _, err := dispatcher.BlocksFromHashes(blocks); err == nil {
-		t.Fatal("unknown hash accepted")
 	}
 }

@@ -28,7 +28,7 @@ func TestGeneratedWorld(t *testing.T) {
 	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
 		t.Fatal(err)
 	}
-	pipeline := dispatcher.NewJavaPipeline(resources.Tables, &atlas, nil)
+	pipeline := dispatcher.NewJavaPipeline(layout, resources.Tables, &atlas, nil)
 	world := generatedWorld{}
 	for _, pos := range []dispatcher.SectionPos{{}, {X: -1, Z: -1}, {X: 12345, Z: -789}} {
 		first, err := world.Section(t.Context(), pos)

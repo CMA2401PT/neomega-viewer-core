@@ -10,6 +10,7 @@ import (
 	nbt "neomega-nbt/presets/v1"
 	"neomega-viewer-core/viewer/blockactor"
 	"neomega-viewer-core/viewer/blockactor/decoratedpot"
+	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher"
@@ -57,7 +58,7 @@ func TestDecoratedPot(t *testing.T) {
 			if err != nil || !reflect.DeepEqual(mesh, compound) {
 				t.Fatalf("NBT representations differ: %v", err)
 			}
-			static, err := mesher.NewMesher(tables).MeshBlock(state.Hash())
+			static, err := mesher.NewMesher(cube.New(1), tables).MeshBlock(state.Hash())
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"neomega-blocks/ir"
+	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher/geometry"
@@ -84,7 +85,7 @@ func checkNumericTables[B blockgeometry.BlockID](t *testing.T, id B) {
 	if !bytes.Equal(encoded.Bytes(), again.Bytes()) {
 		t.Fatal("encoding is not stable")
 	}
-	m := NewMesher(loaded)
+	m := NewMesher(cube.New(16), loaded)
 	mesh, err := m.MeshBlock(id)
 	if err != nil || len(mesh.Quads) != 1 || mesh.Quads[0] != quad {
 		t.Fatalf("single block: %v", err)
@@ -96,7 +97,7 @@ func checkNumericTables[B blockgeometry.BlockID](t *testing.T, id B) {
 	layer := make([]B, 4096)
 	const index = (2 << 8) | (5 << 4) | 3
 	layer[index], layer[index+1] = id, id
-	result, err := m.MeshSubchunk(layer, Options{Meshing: meshing.Options{DisableCulling: true, DisableGreedy: true}})
+	result, err := m.MeshLayer(layer, Options{Meshing: meshing.Options{DisableCulling: true, DisableGreedy: true}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,9 +116,9 @@ func checkNumericTables[B blockgeometry.BlockID](t *testing.T, id B) {
 }
 
 func TestSubchunkInputLength(t *testing.T) {
-	m := NewMesher(&blockgeometry.Tables[uint32]{Index: map[uint32][]blockgeometry.ModelID{0: {}}})
+	m := NewMesher(cube.New(16), &blockgeometry.Tables[uint32]{Index: map[uint32][]blockgeometry.ModelID{0: {}}})
 	for _, count := range []int{0, 4095, 4096, 4097} {
-		result, err := m.MeshSubchunk(make([]uint32, count), Options{})
+		result, err := m.MeshLayer(make([]uint32, count), Options{})
 		if count == 4096 {
 			if err != nil || result == nil || len(result.Mesh.Quads) != 0 {
 				t.Fatalf("empty subchunk: result=%+v, error=%v", result, err)
@@ -133,7 +134,7 @@ func TestAdjacentSectionCoverageAndFluidHeight(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	renderer := NewMesher(resources.Tables)
+	renderer := NewMesher(cube.New(16), resources.Tables)
 	solid := make([]uint32, 4096)
 	for i := range solid {
 		solid[i] = ir.IRBlock("minecraft:stone []").Hash()
@@ -190,7 +191,7 @@ func TestFluidBottomAtSectionBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	renderer := NewMesher(resources.Tables)
+	renderer := NewMesher(cube.New(16), resources.Tables)
 	lower, upper := make([]uint32, 4096), make([]uint32, 4096)
 	for i := range lower {
 		lower[i] = ir.IRBlock("minecraft:air []").Hash()
@@ -223,7 +224,7 @@ func TestMissingShapeUsesUnregisteredReference(t *testing.T) {
 	}
 	missing := resources.Tables.Shapes[ids[0]]
 	tables := &blockgeometry.Tables[uint32]{Index: map[uint32][]blockgeometry.ModelID{0: {}}}
-	m := NewMesher(tables)
+	m := NewMesher(cube.New(16), tables)
 	center := make([]uint32, 4096)
 	center[3<<8|5<<4|4] = 7
 	neighbour := make([]uint32, 4096)
@@ -240,14 +241,14 @@ func TestMissingShapeUsesUnregisteredReference(t *testing.T) {
 	if !reflect.DeepEqual(result.Missing, want) || result.Stats.Shapes != 1 || len(tables.Index) != 1 || len(tables.Shapes) != 0 {
 		t.Fatalf("missing=%v stats=%+v table=%+v", result.Missing, result.Stats, tables)
 	}
-	if _, err := m.MeshSubchunk(center, Options{}); err == nil {
+	if _, err := m.MeshLayer(center, Options{}); err == nil {
 		t.Fatal("missing center ID accepted without placeholder")
 	}
 	if _, err := m.MeshWithNeighbours([][]uint32{make([]uint32, 4096)}, [6][][]uint32{{neighbour}}, Options{}); err == nil {
 		t.Fatal("missing neighbour ID accepted without placeholder")
 	}
 	tables.Index[7] = []blockgeometry.ModelID{100}
-	if _, err := m.MeshSubchunk(center, options); err == nil {
+	if _, err := m.MeshLayer(center, options); err == nil {
 		t.Fatal("placeholder hid an invalid registered model")
 	}
 }

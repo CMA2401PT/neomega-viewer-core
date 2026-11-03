@@ -31,7 +31,7 @@ func main() {
 	if err := json.Unmarshal(atlasJSON, &atlas); err != nil {
 		log.Fatal(err)
 	}
-	pipeline := dispatcher.NewJavaPipeline(resources.Tables, &atlas, nil)
+	pipeline := dispatcher.NewJavaPipeline(layout, resources.Tables, &atlas, nil)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/section", func(w http.ResponseWriter, r *http.Request) {
 		var pos dispatcher.SectionPos

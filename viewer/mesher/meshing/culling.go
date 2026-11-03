@@ -3,6 +3,7 @@ package meshing
 import (
 	"math"
 
+	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher/geometry"
@@ -21,6 +22,7 @@ type inspectedShape struct {
 // A culler belongs to one Build call. Cached inspection never outlives the
 // caller's read-only input, and scratch storage is not shared between workers.
 type culler struct {
+	layout cube.Layout
 	shapes map[*geometry.Shape]*inspectedShape
 	clip   clipBuffers
 }
@@ -59,7 +61,7 @@ func (c *culler) appendCulled(
 	face *inspectedFace,
 	part LayerShape,
 	position [3]int,
-	cells *Cells,
+	cells Cells,
 	neighbours *Boundaries,
 	stats *Stats,
 ) []geometry.Quad {
@@ -70,15 +72,15 @@ func (c *culler) appendCulled(
 	c.clip.reset(rect.box)
 	// Both sources of coverage operate on the same remaining rectangles. Preserve
 	// traversal order so clipping, UV interpolation and output order stay identical.
-	c.subtractEarlierLayers(rect, part.Layer, cells[cellIndex(position)])
+	c.subtractEarlierLayers(rect, part.Layer, cells[c.layout.Index(position[0], position[1], position[2])])
 	side := boundary(*rect)
 	if len(c.clip.remaining) > 0 && side >= 0 && quad.CullFace == geometry.CullFace(side+1) {
 		neighbor := position
 		neighbor[side/2] += 2*(side%2) - 1
-		if neighbor[side/2] >= 0 && neighbor[side/2] < Size {
-			c.subtractNeighbor(quad, part.CullGroup, cells[cellIndex(neighbor)], side^1)
-		} else if neighbours != nil {
-			c.subtractNeighbor(quad, part.CullGroup, neighbours[side][BoundaryIndex(side, position)], side^1)
+		if neighbor[side/2] >= 0 && neighbor[side/2] < c.layout.Side() {
+			c.subtractNeighbor(quad, part.CullGroup, cells[c.layout.Index(neighbor[0], neighbor[1], neighbor[2])], side^1)
+		} else if neighbours != nil && neighbours[side] != nil {
+			c.subtractNeighbor(quad, part.CullGroup, neighbours[side][c.layout.BoundaryIndex(side, position)], side^1)
 		}
 	}
 	remaining := c.clip.remaining

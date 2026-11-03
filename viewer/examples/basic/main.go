@@ -7,11 +7,15 @@ import (
 	"net/http"
 
 	"neomega-blocks/ir"
+	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/mesher"
 	"neomega-viewer-core/viewer/mesher/geometry"
 	preset "neomega-viewer-core/viewer/resources"
 	viewassets "neomega-viewer-core/viewer/resources"
 )
+
+// 示例中的所有输入共用这一个 16³ 坐标约定。
+var layout = cube.New(16)
 
 func main() {
 	listen := flag.String("listen", "127.0.0.1:2413", "HTTP listen address")
@@ -20,7 +24,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	meshBuilder := mesher.NewMesher(resources.Tables)
+	meshBuilder := mesher.NewMesher(layout, resources.Tables)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/subchunk", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("subchunk") != "default" {
@@ -28,7 +32,7 @@ func main() {
 			return
 		}
 		// 每个请求直接构造方块、剔面、合并，再编码成 NVMS 网格。
-		result, err := meshBuilder.MeshSubchunk(defaultSubchunk(), mesher.Options{})
+		result, err := meshBuilder.MeshLayer(defaultSubchunk(), mesher.Options{})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -56,13 +60,13 @@ func defaultSubchunk() []uint32 {
 	oak := ir.IRBlock("minecraft:oak_planks []").Hash()
 	spruce := ir.IRBlock("minecraft:spruce_planks []").Hash()
 	glass := ir.IRBlock("minecraft:glass []").Hash()
-	blocks := make([]uint32, 16*16*16)
+	blocks := make([]uint32, layout.Len())
 	for i := range blocks {
 		blocks[i] = air
 	}
 	set := func(x, y, z int, id uint32) {
-		// MeshSubchunk 的布局：Y 最快，Z 次之，X 最慢。
-		blocks[x<<8|z<<4|y] = id
+		// MeshLayer 的布局：Y 最快，Z 次之，X 最慢。
+		blocks[layout.Index(x, y, z)] = id
 	}
 	for x := 2; x < 14; x++ {
 		for z := 2; z < 14; z++ {

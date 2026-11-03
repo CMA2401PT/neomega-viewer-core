@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"celler/layer_storage"
 	"neomega-blocks/ir"
-	java "neomega-blocks/presets/java/v1"
 	nbt "neomega-nbt/presets/v1"
 	"neomega-viewer-core/viewer/blockactor"
 	"neomega-viewer-core/viewer/blockactor/decoratedpot"
+	"neomega-viewer-core/viewer/blockdata"
+	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/effector"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
@@ -21,13 +21,14 @@ import (
 // section 内按 x、y、z 定位方块实体，与格内几何的平移一致。
 type CellPos = [3]uint8
 
+// Section 是构建器约定的一个 N³ 区域，不保存尺寸；Blocks 为 nil 表示空区域。
 type Section struct {
 	// 完整 Java 状态保留含水属性，诊断和 actor 均使用拆层前的状态。
-	Blocks   *layer_storage.Palette[ir.IRBlock]
+	Blocks   *blockdata.Blocks
 	Entities map[CellPos]nbt.Compound
 }
 
-// 顺序为西、东、下、上、北、南；nil 表示空空间。
+// 顺序为西、东、下、上、北、南；邻居与中心使用相同 N，nil 表示空空间。
 type Neighbours [6]*Section
 
 type DiagnosticKind string
@@ -46,13 +47,14 @@ type Diagnostic struct {
 }
 
 type Pipeline struct {
-	// 组装结果只读共享，每次 Build 单独产生一个子区块快照。
+	// 组装结果只读共享，每次 Build 单独产生一个区域快照。
 	mesher      *mesher.Mesher[uint32]
 	effects     *effector.Effector
 	actors      *blockactor.Dispatcher
 	effectNames map[string]bool
 	actorNames  map[string]bool
 	missing     *blockgeometry.Shape
+	layout      cube.Layout
 }
 
 type Options struct {
@@ -65,7 +67,9 @@ type Result struct {
 	Diagnostics []Diagnostic
 }
 
+// NewPipeline 固定区域布局与处理器组合，后续所有输入都遵守这个尺寸。
 func NewPipeline(
+	layout cube.Layout,
 	tables *blockgeometry.Tables[uint32],
 	effects *effector.Effector,
 	actors *blockactor.Dispatcher,
@@ -73,12 +77,13 @@ func NewPipeline(
 ) *Pipeline {
 	// 从已启用的处理器生成路由，认领范围和实际可调用的处理器保持一致。
 	p := &Pipeline{
-		mesher:      mesher.NewMesher(tables),
+		mesher:      mesher.NewMesher(layout, tables),
 		effects:     effects,
 		actors:      actors,
 		effectNames: map[string]bool{},
 		actorNames:  map[string]bool{},
 		missing:     missing,
+		layout:      layout,
 	}
 	for _, name := range effects.BlockNames() {
 		p.effectNames[name] = true
@@ -89,7 +94,9 @@ func NewPipeline(
 	return p
 }
 
+// NewJavaPipeline 使用指定布局组装 Java 方块、附魔书和可选的陶罐外观。
 func NewJavaPipeline(
+	layout cube.Layout,
 	tables *blockgeometry.Tables[uint32],
 	atlas *jmodel.Atlas,
 	missing *blockgeometry.Shape,
@@ -100,6 +107,7 @@ func NewJavaPipeline(
 		actors = blockactor.New(decoratedpot.New(tables, blockactor.AtlasSurfaces(atlas)))
 	}
 	return NewPipeline(
+		layout,
 		tables,
 		effector.New(map[string]string{"minecraft:enchanting_table": "enchanting_table_book"}),
 		actors,
@@ -118,13 +126,16 @@ type prepared struct {
 
 var air = ir.IRBlock("minecraft:air []").Hash()
 
-func (p *Pipeline) prepare(section Section) *prepared {
-	// 按调色板项拆层与路由，再展开到 4096 格，兼容预置全集以外的 Java 状态。
+func (p *Pipeline) prepare(section Section) (*prepared, error) {
+	// 按调色板项拆层与路由，再展开到构建器约定的 N³ 格，兼容预置全集以外的 Java 状态。
 	result := &prepared{}
 	if section.Blocks == nil {
-		return result
+		return result, nil
 	}
-	palette := section.Blocks.GetUsedPalette()
+	if len(section.Blocks.Indices) != p.layout.Len() {
+		return nil, fmt.Errorf("expected %d block indices, got %d", p.layout.Len(), len(section.Blocks.Indices))
+	}
+	palette := section.Blocks.Palette
 	parts := make([][]uint32, len(palette))
 	effects := make([]bool, len(palette))
 	actors := make([]bool, len(palette))
@@ -137,15 +148,15 @@ func (p *Pipeline) prepare(section Section) *prepared {
 	}
 	result.layers = make([][]uint32, depth)
 	for layer := range result.layers {
-		result.layers[layer] = make([]uint32, 4096)
+		result.layers[layer] = make([]uint32, p.layout.Len())
 		for i := range result.layers[layer] {
 			result.layers[layer][i] = air
 		}
 	}
-	result.states = make([]ir.IRBlock, 4096)
+	result.states = make([]ir.IRBlock, p.layout.Len())
 	for i := range result.states {
-		pos := CellPos{uint8(i >> 8), uint8(i & 15), uint8(i >> 4 & 15)}
-		index := section.Blocks.GetIndex(layer_storage.At(pos[0], pos[1], pos[2]))
+		pos := p.layout.Position(i)
+		index := section.Blocks.Indices[i]
 		state := palette[index]
 		result.states[i] = state
 		for layer, id := range parts[index] {
@@ -167,13 +178,11 @@ func (p *Pipeline) prepare(section Section) *prepared {
 	if len(result.actors) > 0 {
 		result.neighbours = cloneBody(result.layers)
 		for _, actor := range result.actors {
-			result.neighbours[0][cellIndex(actor.Pos)] = air
+			result.neighbours[0][p.layout.Index(int(actor.Pos[0]), int(actor.Pos[1]), int(actor.Pos[2]))] = air
 		}
 	}
-	return result
+	return result, nil
 }
-
-func cellIndex(pos CellPos) int { return int(pos[0])<<8 | int(pos[2])<<4 | int(pos[1]) }
 
 func cloneBody(layers [][]uint32) [][]uint32 {
 	// 只修改本体层，其他层继续共享只读切片。
@@ -187,10 +196,18 @@ func (p *Pipeline) Build(section Section, neighbours Neighbours, options Options
 	var adjacent [6]*prepared
 	for side, neighbour := range neighbours {
 		if neighbour != nil {
-			adjacent[side] = p.prepare(*neighbour)
+			var err error
+			adjacent[side], err = p.prepare(*neighbour)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
-	return p.build(p.prepare(section), adjacent, options)
+	center, err := p.prepare(section)
+	if err != nil {
+		return nil, err
+	}
+	return p.build(center, adjacent, options)
 }
 
 func (p *Pipeline) build(section *prepared, neighbours [6]*prepared, options Options) (*Result, error) {
@@ -212,7 +229,7 @@ func (p *Pipeline) build(section *prepared, neighbours [6]*prepared, options Opt
 			continue
 		}
 		result.Frame.Actors = append(result.Frame.Actors, actor)
-		layers[0][cellIndex(input.Pos)] = air
+		layers[0][p.layout.Index(int(input.Pos[0]), int(input.Pos[1]), int(input.Pos[2]))] = air
 	}
 	var adjacent [6][][]uint32
 	for side, neighbour := range neighbours {
@@ -232,7 +249,7 @@ func (p *Pipeline) build(section *prepared, neighbours [6]*prepared, options Opt
 			result.Diagnostics = append(result.Diagnostics, Diagnostic{
 				Kind:  MissingModel,
 				Pos:   missing.Pos,
-				State: section.states[cellIndex(missing.Pos)],
+				State: section.states[p.layout.Index(int(missing.Pos[0]), int(missing.Pos[1]), int(missing.Pos[2]))],
 			})
 		}
 	}
@@ -242,24 +259,7 @@ func (p *Pipeline) build(section *prepared, neighbours [6]*prepared, options Opt
 	return result, nil
 }
 
-func BlocksFromHashes(blocks []splitlayer.JavaBlockHash) (*layer_storage.Palette[ir.IRBlock], error) {
-	// hash 输入只能恢复预置表中已知的状态；原生存档直接传 IR 调色板。
-	palette := layer_storage.MakePaletteStorage(ir.IRBlock("minecraft:air []"))
-	states := map[uint32]ir.IRBlock{}
-	for i, hash := range blocks {
-		state, found := states[hash]
-		if !found {
-			state, found = java.HashToBlock(hash)
-			if !found {
-				return nil, fmt.Errorf("unknown Java block hash %d", hash)
-			}
-			states[hash] = state
-		}
-		palette.Set(layer_storage.At(i>>8, i&15, i>>4&15), state)
-	}
-	return palette, nil
-}
-
+// SectionPos 使用区域网格坐标；世界方块原点为此坐标乘以构建器的 N。
 type SectionPos struct{ X, Y, Z int32 }
 
 type SectionSource interface {
@@ -293,7 +293,10 @@ func (p *Pipeline) BuildSections(
 		}
 		value := &prepared{}
 		if section != nil {
-			value = p.prepare(*section)
+			value, err = p.prepare(*section)
+			if err != nil {
+				return nil, err
+			}
 		}
 		cache[pos] = value
 		return value, nil

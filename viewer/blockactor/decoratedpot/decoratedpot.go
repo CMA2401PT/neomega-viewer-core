@@ -6,6 +6,7 @@ import (
 
 	nbt "neomega-nbt/presets/v1"
 	"neomega-viewer-core/viewer/blockactor"
+	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher"
@@ -19,7 +20,7 @@ type Handler struct {
 }
 
 func New(tables *blockgeometry.Tables[uint32], surfaces blockactor.SurfaceLookup) *Handler {
-	return &Handler{models: mesher.NewMesher(tables), surfaces: surfaces}
+	return &Handler{models: mesher.NewMesher(cube.New(1), tables), surfaces: surfaces}
 }
 
 func (h *Handler) BlockNames() []string {

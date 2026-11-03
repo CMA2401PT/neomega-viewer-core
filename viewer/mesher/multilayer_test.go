@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"neomega-blocks/ir"
+	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher"
@@ -21,7 +22,7 @@ func multiLayerEngine(t *testing.T) *mesher.Mesher[uint32] {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return mesher.NewMesher(parser.Tables)
+	return mesher.NewMesher(cube.New(16), parser.Tables)
 }
 
 func hash(block ir.IRBlock) uint32 { return block.Tidy().Hash() }
@@ -40,8 +41,8 @@ func TestWaterloggedSlabCoplanarClipping(t *testing.T) {
 	engine := multiLayerEngine(t)
 	blocks := airSubchunk()
 	blocks[cell(4, 4, 4)] = hash(`minecraft:oak_slab ["type"="bottom","waterlogged"="true"]`)
-	layers := splitlayer.New().SplitSubchunk(blocks)
-	result, err := engine.MeshMultiLayerSubchunks(layers, mesher.Options{
+	layers := splitlayer.New().SplitBlocks(blocks)
+	result, err := engine.MeshLayers(layers, mesher.Options{
 		Meshing: meshing.Options{DisableGreedy: true},
 	})
 	if err != nil {
@@ -75,7 +76,7 @@ func TestWaterloggedSlabCoplanarClipping(t *testing.T) {
 	if waterTop != 1 || waterSides != 4 || slabFaces != 6 {
 		t.Fatalf("top=%d sides=%d slab=%d", waterTop, waterSides, slabFaces)
 	}
-	raw, err := engine.MeshMultiLayerSubchunks(layers, mesher.Options{
+	raw, err := engine.MeshLayers(layers, mesher.Options{
 		Meshing: meshing.Options{DisableCulling: true, DisableGreedy: true},
 	})
 	if err != nil {
@@ -100,8 +101,8 @@ func TestPoolCullsWaterAcrossLayers(t *testing.T) {
 		}
 	}
 	blocks[cell(4, 4, 4)] = hash(`minecraft:oak_slab ["type"="bottom","waterlogged"="true"]`)
-	layers := splitlayer.New().SplitSubchunk(blocks)
-	result, err := engine.MeshMultiLayerSubchunks(layers, mesher.Options{
+	layers := splitlayer.New().SplitBlocks(blocks)
+	result, err := engine.MeshLayers(layers, mesher.Options{
 		Meshing: meshing.Options{DisableGreedy: true},
 	})
 	if err != nil {
@@ -135,8 +136,8 @@ func TestFluidHeightAcrossLayersPreservesSlab(t *testing.T) {
 		if wetBelow {
 			blocks[cell(4, 4, 4)], blocks[cell(4, 5, 4)] = wetSlab, water
 		}
-		layers := splitlayer.New().SplitSubchunk(blocks)
-		raw, err := engine.MeshMultiLayerSubchunks(layers, mesher.Options{
+		layers := splitlayer.New().SplitBlocks(blocks)
+		raw, err := engine.MeshLayers(layers, mesher.Options{
 			Meshing: meshing.Options{DisableCulling: true, DisableGreedy: true},
 		})
 		if err != nil {
@@ -157,7 +158,7 @@ func TestFluidHeightAcrossLayersPreservesSlab(t *testing.T) {
 		if lowerTop != 1 || slabFaces != 6 {
 			t.Fatalf("wetBelow=%t: lowerTop=%d slabFaces=%d", wetBelow, lowerTop, slabFaces)
 		}
-		culled, err := engine.MeshMultiLayerSubchunks(layers, mesher.Options{
+		culled, err := engine.MeshLayers(layers, mesher.Options{
 			Meshing: meshing.Options{DisableGreedy: true},
 		})
 		if err != nil {
@@ -172,15 +173,15 @@ func TestFluidHeightAcrossLayersPreservesSlab(t *testing.T) {
 }
 
 func TestMultiLayerErrorsIncludeLayer(t *testing.T) {
-	engine := mesher.NewMesher(&blockgeometry.Tables[uint32]{Index: map[uint32][]blockgeometry.ModelID{0: {}}})
+	engine := mesher.NewMesher(cube.New(16), &blockgeometry.Tables[uint32]{Index: map[uint32][]blockgeometry.ModelID{0: {}}})
 	layers := [][]uint32{make([]uint32, 4096), make([]uint32, 4096)}
 	layers[1][cell(2, 3, 4)] = 7
-	_, err := engine.MeshMultiLayerSubchunks(layers, mesher.Options{})
+	_, err := engine.MeshLayers(layers, mesher.Options{})
 	if err == nil || !strings.Contains(err.Error(), "layer 1, cell (2,3,4), ID 7") {
 		t.Fatalf("missing geometry error lost layer or position: %v", err)
 	}
 	layers[1] = layers[1][:4095]
-	_, err = engine.MeshMultiLayerSubchunks(layers, mesher.Options{})
+	_, err = engine.MeshLayers(layers, mesher.Options{})
 	if err == nil || !strings.Contains(err.Error(), "layer 1:") {
 		t.Fatalf("length error lost layer: %v", err)
 	}

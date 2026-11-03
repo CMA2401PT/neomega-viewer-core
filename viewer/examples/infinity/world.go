@@ -5,18 +5,21 @@ import (
 	"math"
 	"math/rand/v2"
 
-	"celler/layer_storage"
 	"neomega-blocks/ir"
 	nbt "neomega-nbt/presets/v1"
+	"neomega-viewer-core/viewer/blockdata"
+	"neomega-viewer-core/viewer/cube"
 	"neomega-viewer-core/viewer/dispatcher"
 )
 
 var (
-	air   = ir.IRBlock("minecraft:air []")
-	stone = ir.IRBlock("minecraft:stone []")
-	dirt  = ir.IRBlock("minecraft:dirt []")
-	grass = ir.IRBlock(`minecraft:grass_block ["snowy"="false"]`)
-	pots  = []ir.IRBlock{
+	// 世界的数据来源和构建器共用固定 16³ 布局。
+	layout = cube.New(16)
+	air    = ir.IRBlock("minecraft:air []")
+	stone  = ir.IRBlock("minecraft:stone []")
+	dirt   = ir.IRBlock("minecraft:dirt []")
+	grass  = ir.IRBlock(`minecraft:grass_block ["snowy"="false"]`)
+	pots   = []ir.IRBlock{
 		ir.IRBlock(`minecraft:decorated_pot ["cracked"="false","facing"="north","waterlogged"="false"]`),
 		ir.IRBlock(`minecraft:decorated_pot ["cracked"="false","facing"="east","waterlogged"="false"]`),
 		ir.IRBlock(`minecraft:decorated_pot ["cracked"="false","facing"="south","waterlogged"="false"]`),
@@ -44,7 +47,7 @@ func (generatedWorld) Section(_ context.Context, pos dispatcher.SectionPos) (*di
 		return nil, nil
 	}
 	section := &dispatcher.Section{
-		Blocks:   layer_storage.MakePaletteStorage(air),
+		Blocks:   blockdata.Uniform(layout.Len(), air),
 		Entities: map[dispatcher.CellPos]nbt.Compound{},
 	}
 	originX, originZ := int64(pos.X)*16, int64(pos.Z)*16
@@ -58,7 +61,7 @@ func (generatedWorld) Section(_ context.Context, pos dispatcher.SectionPos) (*di
 				} else if y == top-1 {
 					state = dirt
 				}
-				section.Blocks.Set(layer_storage.At(x, y, z), state)
+				section.Blocks.Set(layout.Index(x, y, z), state)
 			}
 		}
 	}
@@ -66,10 +69,10 @@ func (generatedWorld) Section(_ context.Context, pos dispatcher.SectionPos) (*di
 	random := rand.New(rand.NewPCG(uint64(int64(pos.X)), uint64(int64(pos.Z))))
 	x, z := 2+random.IntN(5), 2+random.IntN(12)
 	y := surfaceHeight(originX+int64(x), originZ+int64(z)) + 1
-	section.Blocks.Set(layer_storage.At(x, y, z), ir.IRBlock("minecraft:enchanting_table []"))
+	section.Blocks.Set(layout.Index(x, y, z), ir.IRBlock("minecraft:enchanting_table []"))
 	x, z = 10+random.IntN(4), 2+random.IntN(12)
 	y = surfaceHeight(originX+int64(x), originZ+int64(z)) + 1
-	section.Blocks.Set(layer_storage.At(x, y, z), pots[random.IntN(len(pots))])
+	section.Blocks.Set(layout.Index(x, y, z), pots[random.IntN(len(pots))])
 	items := make([]string, 4)
 	for side := range items {
 		items[side] = sherds[random.IntN(len(sherds))]

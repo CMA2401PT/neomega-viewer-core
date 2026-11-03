@@ -166,3 +166,26 @@ test("regional buffers shrink after unloading and reuse slots without disturbing
   assert.equal(scene.children.length, 0);
   texture.dispose();
 });
+
+test("固定边长决定批次、静态网格和特效的摆放，不读取快照尺寸", () => {
+  for (const side of [1, 3, 16]) {
+    const scene = new THREE.Scene(), texture = atlas();
+    const world = new SectionScene(scene, texture, new Map(), undefined, side);
+    const data = fixture();
+    const origin = world.prepare({ x: 0, y: 0, z: 0 }, data);
+    const placed = world.prepare({ x: -2, y: 1, z: 4 }, data);
+    const offset = new THREE.Vector3(-2 * side, side, 4 * side);
+    assert(placed.bounds.equals(origin.bounds.clone().translate(offset)));
+    const point = new THREE.Vector3().fromBufferAttribute(placed.opaque[0].geometry.getAttribute("position"), 0);
+    world.add(placed);
+    const batch = batches(scene)[0];
+    const range = batch.getGeometryRangeAt(0);
+    const actual = new THREE.Vector3().fromBufferAttribute(batch.geometry.getAttribute("position"), range.vertexStart);
+    actual.add(batch.parent.position);
+    assert.deepEqual(actual.toArray(), point.add(offset).toArray());
+    assert.deepEqual(placed.frame.object.getWorldPosition(new THREE.Vector3()).toArray(), offset.toArray());
+    origin.dispose();
+    world.dispose();
+    texture.dispose();
+  }
+});

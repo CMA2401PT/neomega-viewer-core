@@ -1,11 +1,10 @@
 package fixer
 
 import (
-	"neomega-blocks/ir"
 	"strconv"
 	"testing"
 
-	"celler/layer_storage"
+	"neomega-viewer-core/viewer/blockdata"
 )
 
 func TestLeafDistances(t *testing.T) {
@@ -93,21 +92,21 @@ func TestLeafDistancesAcrossSections(t *testing.T) {
 		t.Fatal(err)
 	}
 	lower, upper := palette(airChunk(t)), palette(airChunk(t))
-	lower.Set(layer_storage.At(8, -1, 8), stateBlock(t, "oak_log", nil))
+	lower.Set(localIndex(8, -1, 8), stateBlock(t, "oak_log", nil))
 	leaves := stateBlock(t, "oak_leaves", map[string]string{"persistent": "false", "distance": "7"})
-	upper.Set(layer_storage.At(8, 0, 8), leaves)
-	upper.Set(layer_storage.At(15, 0, 8), leaves)
-	center := map[int32]*layer_storage.Palette[ir.IRBlock]{
+	upper.Set(localIndex(8, 0, 8), leaves)
+	upper.Set(localIndex(15, 0, 8), leaves)
+	center := map[int32]*blockdata.Blocks{
 		-1: lower, 0: upper,
 	}
 	east := palette(airChunk(t))
-	east.Set(layer_storage.At(0, 0, 8), stateBlock(t, "oak_log", nil))
-	fixed := f.Fix(center, ChunkNeighbours{E: map[int32]*layer_storage.Palette[ir.IRBlock]{0: east}})
-	assertBlock(t, fixed[0].Get(layer_storage.At(8, 0, 8)), stateBlock(t, "oak_leaves", map[string]string{
+	east.Set(localIndex(0, 0, 8), stateBlock(t, "oak_log", nil))
+	fixed := fixColumn(f, center, ChunkNeighbours{E: map[int32]*blockdata.Blocks{0: east}})
+	assertBlock(t, fixed[0].Get(localIndex(8, 0, 8)), stateBlock(t, "oak_leaves", map[string]string{
 		"persistent": "false", "distance": "1",
 	}))
-	assertBlock(t, fixed[0].Get(layer_storage.At(15, 0, 8)), stateBlock(t, "oak_leaves", map[string]string{
+	assertBlock(t, fixed[0].Get(localIndex(15, 0, 8)), stateBlock(t, "oak_leaves", map[string]string{
 		"persistent": "false", "distance": "6",
 	}))
-	assertBlock(t, upper.Get(layer_storage.At(8, 0, 8)), leaves)
+	assertBlock(t, upper.Get(localIndex(8, 0, 8)), leaves)
 }

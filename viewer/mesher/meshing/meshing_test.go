@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"neomega-viewer-core/viewer/cube"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/geometry/material"
 	"neomega-viewer-core/viewer/mesher/geometry"
@@ -367,6 +368,8 @@ func TestRotatedNeighborDoesNotMaskOpaqueFace(t *testing.T) {
 	}
 }
 
+var testLayout = cube.New(16)
+
 type fixtureCell struct {
 	Mesh      geometry.Mesh
 	CullGroup uint32
@@ -377,25 +380,25 @@ func TestSharedMultipartBoundaryCoverage(t *testing.T) {
 	left := face(0, -1, 0, [2]float64{}, [2]float64{.4, 1}, opaque)
 	right := face(0, -1, 0, [2]float64{.4, 0}, [2]float64{1, 1}, opaque)
 	left.CullFace, right.CullFace = geometry.NoCullFace, geometry.NoCullFace
-	var cells Cells
+	cells := make(Cells, 4096)
 	cells[0] = Cell{{Shape: &geometry.Shape{Quads: []geometry.Quad{source}}}}
 	for _, quad := range []geometry.Quad{left, right} {
 		mesh := geometry.Mesh{Quads: []geometry.Quad{quad}}
 		cells[256] = append(cells[256], LayerShape{Shape: &geometry.Shape{Quads: mesh.Quads, Boundary: blockgeometry.BoundaryCoverage(mesh.Quads)}})
 	}
-	_, stats := Build(&cells, Options{DisableGreedy: true})
+	_, stats := New(testLayout).Build(cells, Options{DisableGreedy: true})
 	if stats.RemovedQuads != 1 || stats.ClippedQuads != 0 {
 		t.Fatalf("multipart boundary union lost: %+v", stats)
 	}
 	// 清空覆盖而保留面，确认运行时不会重新扫描邻居补回覆盖。
 	cells[256][1].Boundary = [6][]geometry.BoundaryRect{}
-	_, stats = Build(&cells, Options{DisableGreedy: true})
+	_, stats = New(testLayout).Build(cells, Options{DisableGreedy: true})
 	if stats.RemovedQuads != 0 || stats.ClippedQuads != 1 {
 		t.Fatalf("meshing ignored supplied coverage: %+v", stats)
 	}
 }
 
-type fixtureCells [Size * Size * Size]fixtureCell
+type fixtureCells [4096]fixtureCell
 
 func TestSameCellLayerOcclusion(t *testing.T) {
 	for _, test := range []struct {
@@ -421,12 +424,12 @@ func TestSameCellLayerOcclusion(t *testing.T) {
 			front := face(0, test.frontSign, .5, [2]float64{}, [2]float64{test.width, 1}, test.surface)
 			back := face(0, 1, .5, [2]float64{}, [2]float64{1, 1}, material.Surface{Mode: material.Blend, Opacity: .7})
 			front.CullFace, back.CullFace = geometry.NoCullFace, geometry.NoCullFace
-			var cells Cells
+			cells := make(Cells, 4096)
 			cells[0] = Cell{
 				{Shape: &geometry.Shape{Quads: []geometry.Quad{front}}, Layer: test.frontLayer},
 				{Shape: &geometry.Shape{Quads: []geometry.Quad{back}}, Layer: 1},
 			}
-			_, stats := Build(&cells, Options{DisableGreedy: true})
+			_, stats := New(testLayout).Build(cells, Options{DisableGreedy: true})
 			if stats.RemovedQuads != test.removed || stats.ClippedQuads != test.clipped || stats.VisibleQuads != 2-test.removed {
 				t.Fatalf("layer coverage: %+v", stats)
 			}
@@ -437,17 +440,17 @@ func TestSameCellLayerOcclusion(t *testing.T) {
 func TestGreedyMergesAcrossLayers(t *testing.T) {
 	quad := face(1, 1, 1, [2]float64{}, [2]float64{1, 1}, opaque)
 	shape := &geometry.Shape{Quads: []geometry.Quad{quad}}
-	var cells Cells
+	cells := make(Cells, 4096)
 	cells[0] = Cell{{Shape: shape, Layer: 0}}
 	cells[256] = Cell{{Shape: shape, Layer: 1}}
-	_, stats := Build(&cells, Options{})
+	_, stats := New(testLayout).Build(cells, Options{})
 	if stats.InputQuads != 2 || stats.VisibleQuads != 2 || stats.OutputQuads != 1 {
 		t.Fatalf("layers did not share a greedy pass: %+v", stats)
 	}
 }
 
 func buildFixture(fixtures *fixtureCells, options Options) (geometry.Mesh, Stats) {
-	var cells Cells
+	cells := make(Cells, 4096)
 	for i, fixture := range fixtures {
 		if len(fixture.Mesh.Quads) != 0 {
 			cells[i] = Cell{{Shape: &geometry.Shape{
@@ -457,5 +460,5 @@ func buildFixture(fixtures *fixtureCells, options Options) (geometry.Mesh, Stats
 			}}}
 		}
 	}
-	return Build(&cells, options)
+	return New(testLayout).Build(cells, options)
 }

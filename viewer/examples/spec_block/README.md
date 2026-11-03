@@ -8,6 +8,8 @@
 
 为了把三种内容一起传给网页，[main.go](main.go) 使用 `dispatcher.NewJavaPipeline` 创建分发器。它将普通方块交给 mesher 剔面和合并，为附魔台生成书本消息，并按陶罐的 NBT 替换侧面材质。陶罐的纹样需要图集区域，因此分发器还接收与内嵌几何表配套的 `blocksAtlases.json`。
 
+构建器使用 `cube.New(16)` 固定尺寸，方块输入采用不带尺寸的 `blockdata.Blocks`。
+
 输入是 `dispatcher.Section`：完整 Java 方块状态的调色板，以及按格内坐标关联的实体 NBT。陶罐的 `sherds` 使用四项列表，顺序是 back、left、right、front，分别为垂钓、弓箭、利刃和举臂纹样。格式与朝向说明见 [陶罐 NBT](../../blockactor/decoratedpot/NBT.md)。
 
 `Pipeline.Build` 生成静态网格、effect 消息和 actor 网格。`Frame.Marshal` 将它们编码成 NVFR（viewer 的完整快照二进制格式）。处理器诊断会写到 Go 日志，便于发现陶罐处理失败等问题。
