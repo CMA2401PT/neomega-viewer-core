@@ -28,7 +28,7 @@ func TestEntityListOwnsOutputWithoutBlocks(t *testing.T) {
 		return []entity_render.Entity{entity, entity}
 	}}
 	center := dispatcher.Section{Entities: input}
-	result, err := pipeline.Build(center, dispatcher.Neighbours{&center}, dispatcher.Options{})
+	result, err := pipeline.Build(center, dispatcher.Neighbours{{-1, 0, 0}: &center}, dispatcher.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

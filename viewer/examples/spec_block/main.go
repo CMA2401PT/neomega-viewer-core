@@ -48,7 +48,7 @@ func main() {
 		var err error
 		result, err = pipeline.Build(
 			defaultSubchunk(),
-			dispatcher.Neighbours{}, // 六向邻居留空，区域外按空气处理。
+			dispatcher.Neighbours{}, // 邻域留空，区域外按空气处理。
 			dispatcher.Options{},    // 默认启用剔面与相邻面合并。
 		)
 		if err != nil {

@@ -24,9 +24,10 @@ func TestConfiguredSizesAndNeighbours(t *testing.T) {
 			pipeline := dispatcher.NewPipeline(layout, resources, effector.New(nil), blockactor.New(), nil, nil)
 			input := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:stone []"))}
 			for direction := -1; direction < 6; direction++ {
-				var neighbours dispatcher.Neighbours
+				neighbours := dispatcher.Neighbours{}
 				if direction >= 0 {
-					neighbours[direction] = &input
+					offset := [6][3]int{{-1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}}[direction]
+					neighbours[offset] = &input
 				}
 				result, err := pipeline.Build(input, neighbours, dispatcher.Options{})
 				if err != nil {
@@ -54,7 +55,7 @@ func TestConfiguredSizesAndNeighbours(t *testing.T) {
 			if _, err := pipeline.Build(wrong, dispatcher.Neighbours{}, dispatcher.Options{}); err == nil {
 				t.Fatal("接受了错误尺寸的中心输入")
 			}
-			if _, err := pipeline.Build(input, dispatcher.Neighbours{&wrong}, dispatcher.Options{}); err == nil {
+			if _, err := pipeline.Build(input, dispatcher.Neighbours{{-1, 0, 0}: &wrong}, dispatcher.Options{}); err == nil {
 				t.Fatal("接受了错误尺寸的邻居")
 			}
 		})
@@ -69,9 +70,9 @@ func TestConfiguredFluidHeight(t *testing.T) {
 		pipeline := dispatcher.NewPipeline(layout, resources, effector.New(nil), blockactor.New(), nil, nil)
 		input := dispatcher.Section{Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock(`minecraft:water ["level"="0"]`))}
 		for _, above := range []bool{false, true} {
-			var neighbours dispatcher.Neighbours
+			neighbours := dispatcher.Neighbours{}
 			if above {
-				neighbours[3] = &input
+				neighbours[[3]int{0, 1, 0}] = &input
 			}
 			result, err := pipeline.Build(input, neighbours, dispatcher.Options{})
 			if err != nil {

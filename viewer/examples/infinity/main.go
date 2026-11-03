@@ -46,7 +46,7 @@ func main() {
 			}
 			*target = int32(value)
 		}
-		// generatedWorld 在 world.go 按坐标生成方块；BuildSections 额外读取六向邻居用于边界剔面。
+		// generatedWorld 在 world.go 按坐标生成方块；BuildSections 额外读取邻域，用于边界剔面与流体高度判断。
 		// 返回值只包含请求的位置，顺序与输入一致，所以这里取唯一的 results[0]。
 		var results []dispatcher.PositionedResult
 		var err error

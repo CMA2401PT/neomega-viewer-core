@@ -124,9 +124,19 @@ if err := result.Frame.Marshal(writer); err != nil {
 
 展示框几何追加到 `Frame.Mesh`，不占用 block actor 通道，也不改变 NVFR。物品失败时保留框体，错误通过独立的 `Result.EntityDiagnostics` 返回。普通物品与 `fixed` 变换的边界见 [item_render](item_render/README.md)。
 
-中心、六向邻居及批量来源都必须遵守同一构建器的尺寸。需要跨 section 剔面时，`Neighbours` 按西、东、下、上、北、南传入邻居，nil 代表空空间。邻居只提供拆层后的覆盖信息；actor 候选格的本体不参与遮挡，水层仍提供覆盖。这种处理可能保留额外的面，避免用静态本体误遮挡 actor 周围的可见表面。
+中心、邻居及批量来源都必须遵守同一构建器的尺寸。需要跨 section 剔面时，`dispatcher.Neighbours` 用相对中心的区域坐标作为键，未提供的位置按空气处理。例如 `{-1, 0, 0}` 是西邻居，`{-1, 1, 0}` 是西邻居的上方。除了六个接触面的邻居，还需提供四个水平邻居上方的区域，因为边界流体是否满高也取决于它们的上方。N=1 时还需提供 `{0, 2, 0}`，以确定上邻居的实际形状。
 
-批量构建使用 `BuildSections(ctx, source, positions, options)`。调用方实现 `SectionSource`，按区域网格坐标提供数据，相邻坐标相差一个 N³ 区域。Pipeline 在一次调用内缓存请求位置与六向邻居的读取和拆层结果，按请求顺序返回各位置的快照，不存在的位置返回空快照。存档来源的解码与实体分组由外层应用完成。
+```go
+neighbours := dispatcher.Neighbours{
+    {-1, 0, 0}: west,
+    {-1, 1, 0}: westAbove,
+}
+result, err := pipeline.Build(center, neighbours, dispatcher.Options{})
+```
+
+邻居只提供拆层后的覆盖信息；actor 候选格的本体不参与遮挡，水层仍提供覆盖。这种处理可能保留额外的面，避免用静态本体误遮挡 actor 周围的可见表面。
+
+批量构建使用 `BuildSections(ctx, source, positions, options)`。调用方实现 `SectionSource`，按区域网格坐标提供数据，相邻坐标相差一个 N³ 区域。Pipeline 自动读取上述邻域，并在一次调用内缓存请求位置与邻域的读取和拆层结果，按请求顺序返回各位置的快照，不存在的位置返回空快照。存档来源的解码与实体分组由外层应用完成。
 
 世界存储的 hash 输入由应用层 `source.PaletteFromHashes` 反查成完整状态，再由 `source.BlocksFromPalette` 接入渲染；未知 hash 返回错误。
 应用层的 [frame 接口](../../apps/neomega-viewer/demo/httpapi/frame.go) 使用这条路径，场景配方中的 SNBT（NBT 的文本表示）由应用层解析成 Compound。
@@ -190,7 +200,7 @@ go generate ./viewer/resources
 
 多层输入时，各层的几何按位置并进同一格，再一起剔面与合并，所以含水台阶的水和旁边的普通水之间照常剔掉内面。同一格内，前层的不透明面会裁掉后层与它共面的部分；前层是树叶这类满格镂空方块时，后层改为缩进到 0.99 倍并跳过剔面，避免共面闪烁。上方格任意一层有同类流体，本格流体就切换成满高度。
 
-`prepareNeighborhood` 准备各格的共享几何引用，并根据上方邻居切换流体高度。独立子区块的外部按空覆盖处理。组装地图时，`MeshWithNeighbours(layers, neighbours, options)` 接收西、东、下、上、北、南六个邻居的完整多层数组，每层同样为 N³ 格；缺失邻居传 nil。入口只提取接触面的覆盖，也用上方邻居决定顶层流体是否满高。剔面和合并放在同一个渲染入口内，因为剔面需要直接访问邻居几何，并可能留下半个面这样的局部片段。这样可以直接把剩余面片交给合并步骤，省去另行传递一份裁剪结果。确定形状后，`meshing` 分两步减少面：
+`prepareNeighborhood` 准备各格的共享几何引用，并根据上方邻居切换流体高度。独立子区块的外部按空覆盖处理。组装地图时，`MeshWithNeighbours(layers, neighbours, options)` 接收 `mesher.Neighbours[B]`，用相对中心的区域坐标查询完整多层数组，每层同样为 N³ 格。调用方可通过 `renderer.NeighbourOffsets()` 取得需要提供的位置，未提供的位置按空气处理。入口只提取六个接触面的覆盖，并结合各自上方的区域决定流体是否满高。剔面和合并放在同一个渲染入口内，因为剔面需要直接访问邻居几何，并可能留下半个面这样的局部片段。这样可以直接把剩余面片交给合并步骤，省去另行传递一份裁剪结果。确定形状后，`meshing` 分两步减少面：
 
 1. **剔除实际被盖住的部分。** 模型声明可剔除、且位于格子边界的轴对齐矩形，才会检查邻居。邻居覆盖直接来自 Shape.Boundary，无须逐格重扫几何。完整不透明面可以遮挡；多个部件的矩形并集也可以形成覆盖。石头紧贴底半砖时，只裁掉下半部分，并为保留部分重新插值 UV。斜面和非矩形保守保留。
 2. **合并相邻矩形。** 在同一平面上按实际矩形边界建立二维网格，贪婪地扩展连续区域。只有材质、颜色、法线、光照方向、UV 变化率和重复相位兼容时才合并。合并后的 UV 延伸到多个纹理周期，保持每个方块原有的纹理尺寸。

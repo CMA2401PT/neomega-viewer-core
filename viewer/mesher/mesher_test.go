@@ -2,6 +2,7 @@ package mesher
 
 import (
 	"bytes"
+	"maps"
 	"math"
 	"reflect"
 	"testing"
@@ -139,9 +140,9 @@ func TestAdjacentSectionCoverageAndFluidHeight(t *testing.T) {
 	for i := range solid {
 		solid[i] = ir.IRBlock("minecraft:stone []").Hash()
 	}
-	var neighbours [6][][]uint32
-	for side := range neighbours {
-		neighbours[side] = [][]uint32{solid}
+	neighbours := Neighbours[uint32]{}
+	for _, offset := range adjacentOffsets {
+		neighbours[offset] = [][]uint32{solid}
 	}
 	result, err := renderer.MeshWithNeighbours([][]uint32{solid}, neighbours, Options{})
 	if err != nil {
@@ -150,15 +151,15 @@ func TestAdjacentSectionCoverageAndFluidHeight(t *testing.T) {
 	if len(result.Mesh.Quads) != 0 {
 		t.Fatal("enclosed section has visible faces")
 	}
-	for side := range neighbours {
-		exposed := neighbours
-		exposed[side] = nil
+	for _, offset := range adjacentOffsets {
+		exposed := maps.Clone(neighbours)
+		delete(exposed, offset)
 		result, err = renderer.MeshWithNeighbours([][]uint32{solid}, exposed, Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(result.Mesh.Quads) != 1 {
-			t.Fatalf("side %d: got %d quads", side, len(result.Mesh.Quads))
+			t.Fatalf("offset %v: got %d quads", offset, len(result.Mesh.Quads))
 		}
 	}
 	lower, upper := make([]uint32, 4096), make([]uint32, 4096)
@@ -169,8 +170,8 @@ func TestAdjacentSectionCoverageAndFluidHeight(t *testing.T) {
 	water := ir.IRBlock(`minecraft:water ["level"="0"]`).Hash()
 	lower[2<<8|3<<4|15] = water
 	upper[2<<8|3<<4] = water
-	neighbours = [6][][]uint32{}
-	neighbours[3] = [][]uint32{upper}
+	neighbours = Neighbours[uint32]{}
+	neighbours[[3]int{0, 1, 0}] = [][]uint32{upper}
 	result, err = renderer.MeshWithNeighbours([][]uint32{lower}, neighbours, Options{Meshing: meshing.Options{DisableCulling: true, DisableGreedy: true}})
 	if err != nil {
 		t.Fatal(err)
@@ -200,8 +201,8 @@ func TestFluidBottomAtSectionBoundary(t *testing.T) {
 	water := ir.IRBlock(`minecraft:water ["level"="0"]`).Hash()
 	lower[2<<8|3<<4|15] = water
 	upper[2<<8|3<<4] = water
-	var neighbours [6][][]uint32
-	neighbours[2] = [][]uint32{lower}
+	neighbours := Neighbours[uint32]{}
+	neighbours[[3]int{0, -1, 0}] = [][]uint32{lower}
 	result, err := renderer.MeshWithNeighbours([][]uint32{upper}, neighbours, Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -230,7 +231,7 @@ func TestMissingShapeUsesUnregisteredReference(t *testing.T) {
 	neighbour := make([]uint32, 4096)
 	neighbour[15<<8] = 8
 	options := Options{MissingShape: &missing}
-	result, err := m.MeshWithNeighbours([][]uint32{center, center}, [6][][]uint32{{neighbour}}, options)
+	result, err := m.MeshWithNeighbours([][]uint32{center, center}, Neighbours[uint32]{{-1, 0, 0}: {neighbour}}, options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +245,7 @@ func TestMissingShapeUsesUnregisteredReference(t *testing.T) {
 	if _, err := m.MeshLayer(center, Options{}); err == nil {
 		t.Fatal("missing center ID accepted without placeholder")
 	}
-	if _, err := m.MeshWithNeighbours([][]uint32{make([]uint32, 4096)}, [6][][]uint32{{neighbour}}, Options{}); err == nil {
+	if _, err := m.MeshWithNeighbours([][]uint32{make([]uint32, 4096)}, Neighbours[uint32]{{-1, 0, 0}: {neighbour}}, Options{}); err == nil {
 		t.Fatal("missing neighbour ID accepted without placeholder")
 	}
 	tables.Index[7] = []blockgeometry.ModelID{100}

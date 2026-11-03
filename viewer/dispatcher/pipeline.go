@@ -28,8 +28,8 @@ type Section struct {
 	Entities      *entity_render.Input
 }
 
-// 顺序为西、东、下、上、北、南；邻居与中心使用相同 N，nil 表示空空间。
-type Neighbours [6]*Section
+// Neighbours 按相对中心的区域偏移（X、Y、Z）提供邻居；邻居与中心使用相同 N，缺失位置按空气处理。
+type Neighbours map[[3]int]*Section
 
 type DiagnosticKind string
 
@@ -177,11 +177,12 @@ func cloneBody(layers [][]uint32) [][]uint32 {
 
 func (p *Pipeline) Build(section Section, neighbours Neighbours, options Options) (*Result, error) {
 	// 单 section 与批量构建共用准备和构建逻辑。
-	var adjacent [6]*prepared
-	for side, neighbour := range neighbours {
+	adjacent := map[[3]int]*prepared{}
+	for _, offset := range p.mesher.NeighbourOffsets() {
+		neighbour := neighbours[offset]
 		if neighbour != nil {
 			var err error
-			adjacent[side], err = p.prepare(*neighbour)
+			adjacent[offset], err = p.prepare(*neighbour)
 			if err != nil {
 				return nil, err
 			}
@@ -194,7 +195,7 @@ func (p *Pipeline) Build(section Section, neighbours Neighbours, options Options
 	return p.build(center, adjacent, options)
 }
 
-func (p *Pipeline) build(section *prepared, neighbours [6]*prepared, options Options) (*Result, error) {
+func (p *Pipeline) build(section *prepared, neighbours map[[3]int]*prepared, options Options) (*Result, error) {
 	// actor 成功才移除静态本体；失败只影响当前格，水层始终保留。
 	result := &Result{}
 	layers := section.layers
@@ -215,10 +216,10 @@ func (p *Pipeline) build(section *prepared, neighbours [6]*prepared, options Opt
 		result.Frame.Actors = append(result.Frame.Actors, actor)
 		layers[0][p.layout.Index(int(input.Pos[0]), int(input.Pos[1]), int(input.Pos[2]))] = air
 	}
-	var adjacent [6][][]uint32
-	for side, neighbour := range neighbours {
+	adjacent := mesher.Neighbours[uint32]{}
+	for offset, neighbour := range neighbours {
 		if neighbour != nil {
-			adjacent[side] = neighbour.neighbours
+			adjacent[offset] = neighbour.neighbours
 		}
 	}
 	options.Mesh.MissingShape = p.missing
@@ -267,7 +268,7 @@ func (p *Pipeline) BuildSections(
 	positions []SectionPos,
 	options Options,
 ) ([]PositionedResult, error) {
-	// 请求位置与六向邻居在调用内只读取和准备一次，仅输出请求位置，不存在的位置产生空快照。
+	// 请求位置与剔面、流体高度所需的邻域在调用内只读取和准备一次，仅输出请求位置。
 	cache := map[SectionPos]*prepared{}
 	load := func(pos SectionPos) (*prepared, error) {
 		if err := ctx.Err(); err != nil {
@@ -290,18 +291,19 @@ func (p *Pipeline) BuildSections(
 		cache[pos] = value
 		return value, nil
 	}
+	offsets := p.mesher.NeighbourOffsets()
 	var results []PositionedResult
 	for _, pos := range positions {
 		section, err := load(pos)
 		if err != nil {
 			return nil, err
 		}
-		var neighbours [6]*prepared
-		for side, delta := range [6]SectionPos{{X: -1}, {X: 1}, {Y: -1}, {Y: 1}, {Z: -1}, {Z: 1}} {
-			neighbours[side], err = load(SectionPos{
-				X: pos.X + delta.X,
-				Y: pos.Y + delta.Y,
-				Z: pos.Z + delta.Z,
+		neighbours := map[[3]int]*prepared{}
+		for _, offset := range offsets {
+			neighbours[offset], err = load(SectionPos{
+				X: pos.X + int32(offset[0]),
+				Y: pos.Y + int32(offset[1]),
+				Z: pos.Z + int32(offset[2]),
 			})
 			if err != nil {
 				return nil, err

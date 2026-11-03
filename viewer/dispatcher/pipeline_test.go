@@ -115,7 +115,7 @@ func TestMissingDiagnosticsPreserveState(t *testing.T) {
 	input.Blocks.Set(cube.New(16).Index(4, 5, 6), state)
 	neighbour := section()
 	neighbour.Blocks.Set(cube.New(16).Index(15, 0, 0), ir.IRBlock("example:neighbour []"))
-	result, err := pipeline.Build(input, dispatcher.Neighbours{&neighbour}, dispatcher.Options{})
+	result, err := pipeline.Build(input, dispatcher.Neighbours{{-1, 0, 0}: &neighbour}, dispatcher.Options{})
 	if err != nil || len(result.Diagnostics) != 1 {
 		t.Fatalf("missing report: %v %v", result, err)
 	}
@@ -184,7 +184,7 @@ func TestActorNeighboursDoNotOcclude(t *testing.T) {
 	input.Blocks.Set(cube.New(16).Index(0, 0, 0), ir.IRBlock("minecraft:dirt []"))
 	neighbour := section()
 	neighbour.Blocks.Set(cube.New(16).Index(15, 0, 0), ir.IRBlock(`minecraft:stone ["waterlogged"="true"]`))
-	result, err := pipeline.Build(input, dispatcher.Neighbours{&neighbour}, dispatcher.Options{})
+	result, err := pipeline.Build(input, dispatcher.Neighbours{{-1, 0, 0}: &neighbour}, dispatcher.Options{})
 	if err != nil || result.Stats.OutputQuads != 6 || len(handler.inputs) != 0 || len(result.Diagnostics) != 0 {
 		t.Fatalf("neighbour actor built or hid visible faces: %+v %v", result, err)
 	}

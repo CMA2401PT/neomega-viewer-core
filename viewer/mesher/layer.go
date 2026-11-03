@@ -34,6 +34,28 @@ type Result struct {
 	Stats   Stats
 }
 
+// Neighbours 按相对中心的区域偏移（X、Y、Z）提供多层方块；缺失位置按空气处理。
+type Neighbours[B blockgeometry.BlockID] map[[3]int][][]B
+
+// 六个接触面仍按西、东、下、上、北、南排列，与 meshing.Boundaries 对应。
+var adjacentOffsets = [6][3]int{{-1, 0, 0}, {1, 0, 0}, {0, -1, 0}, {0, 1, 0}, {0, 0, -1}, {0, 0, 1}}
+
+// NeighbourOffsets 返回构建中心网格所需的区域偏移，包含判定邻居流体高度的上方区域。
+func (m *Mesher[B]) NeighbourOffsets() [][3]int {
+	offsets := append([][3]int(nil), adjacentOffsets[:]...)
+	for _, offset := range adjacentOffsets {
+		if offset[1] == 0 {
+			offset[1] = 1
+			offsets = append(offsets, offset)
+		}
+	}
+	if m.layout.Side() == 1 {
+		// 一格区域的上邻居也位于自身顶层，其形状还取决于再上一格。
+		offsets = append(offsets, [3]int{0, 2, 0})
+	}
+	return offsets
+}
+
 // MeshLayer 构建一层 N³ 个状态 ID，外部邻居按空气处理。
 func (m *Mesher[B]) MeshLayer(blocks []B, options Options) (*Result, error) {
 	return m.MeshLayers([][]B{blocks}, options)
@@ -41,17 +63,23 @@ func (m *Mesher[B]) MeshLayer(blocks []B, options Options) (*Result, error) {
 
 // MeshLayers 将同格的各层一起剔面与合并，外部邻居按空气处理。
 func (m *Mesher[B]) MeshLayers(layerBlocks [][]B, options Options) (*Result, error) {
-	return m.MeshWithNeighbours(layerBlocks, [6][][]B{}, options)
+	return m.MeshWithNeighbours(layerBlocks, nil, options)
 }
 
-// MeshWithNeighbours accepts adjacent layers in west/east/down/up/north/south
-// order. Missing neighbours are exposed space. Inputs remain owned by the caller.
-func (m *Mesher[B]) MeshWithNeighbours(layerBlocks [][]B, neighbours [6][][]B, options Options) (*Result, error) {
+// MeshWithNeighbours 根据相对坐标查询邻居并剔面，所需位置见 NeighbourOffsets；输入保持只读。
+func (m *Mesher[B]) MeshWithNeighbours(layerBlocks [][]B, neighbours Neighbours[B], options Options) (*Result, error) {
 	// 每层遵守构建器的 N³ 约定，层号决定同格共面的覆盖先后。
 	blockCount := m.layout.Len()
 	for layer, blocks := range layerBlocks {
 		if len(blocks) != blockCount {
 			return nil, fmt.Errorf("layer %d: region requires %d block IDs, got %d", layer, blockCount, len(blocks))
+		}
+	}
+	for offset, layers := range neighbours {
+		for layer, blocks := range layers {
+			if len(blocks) != blockCount {
+				return nil, fmt.Errorf("neighbour %v layer %d: expected %d blocks, got %d", offset, layer, blockCount, len(blocks))
+			}
 		}
 	}
 	boundaries, err := m.boundaries(layerBlocks, neighbours, options.MissingShape)
@@ -183,18 +211,16 @@ func countGeometry(cells meshing.Cells) (int, int) {
 
 func (m *Mesher[B]) boundaries(
 	center [][]B,
-	neighbours [6][][]B,
+	neighbours Neighbours[B],
 	missing *blockgeometry.Shape,
 ) (*meshing.Boundaries, error) {
 	result := &meshing.Boundaries{}
-	for side, layers := range neighbours {
+	for side, offset := range adjacentOffsets {
+		layers := neighbours[offset]
 		if len(layers) > 0 {
 			result[side] = make([]meshing.Cell, m.layout.Side()*m.layout.Side())
 		}
 		for layer, values := range layers {
-			if len(values) != m.layout.Len() {
-				return nil, fmt.Errorf("neighbour %d layer %d: expected %d blocks", side, layer, m.layout.Len())
-			}
 			for a := 0; a < m.layout.Side(); a++ {
 				for b := 0; b < m.layout.Side(); b++ {
 					edge := m.layout.Side() - 1
@@ -216,11 +242,13 @@ func (m *Mesher[B]) boundaries(
 						shape := part.LayerShape
 						aboveLayers, aboveIndex := layers, index+1
 						if p[1] == m.layout.Side()-1 {
-							aboveLayers = nil
-							if side == 2 {
-								// The lower neighbour's top fluid touches this section's bottom.
-								aboveLayers, aboveIndex = center, index-(m.layout.Side()-1)
+							aboveOffset := offset
+							aboveOffset[1]++
+							aboveLayers = neighbours[aboveOffset]
+							if aboveOffset == ([3]int{}) {
+								aboveLayers = center
 							}
+							aboveIndex = index - (m.layout.Side() - 1)
 						}
 						if part.fullHeight != nil {
 							for aboveLayer, aboveValues := range aboveLayers {
