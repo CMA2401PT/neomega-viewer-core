@@ -11,8 +11,77 @@ import (
 	"neomega-viewer-core/viewer/javapreset"
 	"neomega-viewer-core/viewer/merger"
 	resources "neomega-viewer-core/viewer/resources"
+	"reflect"
 	"testing"
 )
+
+func TestSignPipelineWaterAndSnapshot(t *testing.T) {
+	preset, err := resources.Open(resources.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	layout := cube.New(2)
+	pipeline, err := javapreset.NewPipeline(layout, preset.Tables, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	state := ir.IRBlock(`minecraft:oak_sign ["rotation"="0","waterlogged"="true"]`).Tidy()
+	section := dispatcher.Section{
+		Blocks: blockdata.Uniform(layout.Len(), ir.IRBlock("minecraft:air []")),
+		Entities: map[dispatcher.CellPos]nbt.Compound{
+			{0, 1, 0}: {"front_text": map[string]any{"messages": []string{"你好 Java"}, "has_glowing_text": int8(1)}},
+			{1, 1, 0}: {"front_text": map[string]any{"color": "invalid"}},
+		},
+	}
+	section.Blocks.Set(layout.Index(0, 1, 0), state)
+	section.Blocks.Set(layout.Index(1, 1, 0), state)
+	result, err := pipeline.Build(section, dispatcher.Neighbours{}, dispatcher.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Frame.Actors) != 1 || len(result.Diagnostics) != 1 || result.Diagnostics[0].Kind != dispatcher.ActorError {
+		t.Fatal("只有无效文字所在格应退回静态牌体", result.Diagnostics)
+	}
+	water, wood := false, false
+	for _, q := range result.Frame.Mesh.Quads {
+		if q.Surface.Texture == "minecraft:block/water_still" || q.Surface.Texture == "minecraft:block/water_flow" {
+			water = true
+		}
+		if q.Surface.Texture == "minecraft:entity/signs/oak" {
+			wood = true
+		}
+	}
+	if !water || !wood {
+		t.Fatal("actor 替换本体时丢了水层，或错误牌体没有回退")
+	}
+	actor := result.Frame.Actors[0]
+	if actor.Pos != ([3]uint8{0, 1, 0}) || len(actor.Textures) != 2 {
+		t.Fatal("actor 坐标或文字贴图没有传出")
+	}
+	var encoded bytes.Buffer
+	if err := result.Frame.Marshal(&encoded); err != nil {
+		t.Fatal(err)
+	}
+	restored, err := merger.Unmarshal(bytes.NewReader(encoded.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(restored.Actors[0].Textures, actor.Textures) {
+		t.Fatal("快照没有原样保留文字像素")
+	}
+	unlit := false
+	for _, q := range restored.Actors[0].Mesh.Quads {
+		if q.Surface.Texture == "sign:front" {
+			unlit = q.Surface.Unlit
+			if q.Positions[0][1] < 1 {
+				t.Fatal("格内网格未平移")
+			}
+		}
+	}
+	if !unlit {
+		t.Fatal("发光文字的 Unlit 属性没有通过协议")
+	}
+}
 
 func TestBannerPipelineAndFallback(t *testing.T) {
 	preset, err := resources.Open(resources.OpenOptions{})

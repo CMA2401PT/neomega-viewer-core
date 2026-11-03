@@ -19,7 +19,12 @@ Java 状态全集和方块哈希使用相邻的 `neomega-blocks` preset。转换
 Required Notice: Copyright Amulet Team. (https://www.amuletmc.com/)
 
 模型、公共图集和特殊方块的静态外形来自 `viewer-assets` 交付文件。
-`viewer/blockactor/banner/textures`、`viewer/blockactor/decoratedpot/textures` 与 `viewer/web/render/effects/enchanting_table_book.png` 保存同一 Java 1.21.4 资源来源的原始 PNG，作为固定源码资源维护。其中的社区模板来自 `zardoy/mc-assets` 固定提交 `c63d6dacd358a8ea73b453d6958167b49dcc3f6c`，声明为 `Copyright 2024 Vitaly Turovsky, contributors`，采用 MIT。原始模型署名由资源生成器保留。具体来源和适配关系见 [neomega-viewer-core/viewer-assets/NOTICE.md](viewer-assets/NOTICE.md)。
+`viewer/blockactor/banner/textures`、`viewer/blockactor/decoratedpot/textures`、`viewer/blockactor/sign/textures` 与 `viewer/web/render/effects/enchanting_table_book.png` 保存同一 Java 1.21.4 资源来源的原始 PNG，作为固定源码资源维护。其中的社区模板来自 `zardoy/mc-assets` 固定提交 `c63d6dacd358a8ea73b453d6958167b49dcc3f6c`，声明为 `Copyright 2024 Vitaly Turovsky, contributors`，采用 MIT。原始模型署名由资源生成器保留。具体来源和适配关系见 [neomega-viewer-core/viewer-assets/NOTICE.md](viewer-assets/NOTICE.md)。
+
+告示牌的 `viewer/blockactor/sign/font` 同时保存 Java 1.21.4 默认位图字体与配置，以及官方资源索引提供的 GNU Unifont 16.0.01。
+`bitmap.json` 与三张 PNG 来自客户端 JAR；`unifont.json` 提取默认非日文字体的宽度覆盖表。
+`unifont.zip` 保持官方分发包原样，包含原始 HEX 字体和 `LICENSE.txt`；另附 [UNIFONT-LICENSE.txt](viewer/blockactor/sign/font/UNIFONT-LICENSE.txt) 便于阅读。
+Unifont 字体按原文提供 SIL Open Font License 1.1 与带字体嵌入例外的 GPL 条款，不能把本项目的 MIT 许可套用于这些字体。
 
 Minecraft 模型、纹理及其衍生素材保留原权利人的权利。资源提取、图集打包和顶点生成不产生新的素材授权。应用分发资源时，应保留 `dist/final/THIRD_PARTY_NOTICES.txt`，并遵守输入素材适用的 [Minecraft EULA](https://www.minecraft.net/eula)、[Usage Guidelines](https://www.minecraft.net/usage-guidelines) 和额外资源包条款。
 

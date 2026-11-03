@@ -11,7 +11,7 @@ Go 负责网格构建及二进制编码，Web 包负责解码、材质、场景�
 
 ## 最简示例
 
-从 [single_block](examples/single_block/README.md) 可以分别查看含水树叶、动画火焰、附魔台、纹样陶罐与旗帜，每个场景只显示一个方块。
+从 [single_block](examples/single_block/README.md) 可以分别查看含水树叶、动画火焰、附魔台、纹样陶罐、旗帜与双面告示牌，每个场景只显示一个方块。
 需要多个方块时，[basic](examples/basic/README.md) 展示静态子区块，[spec_block](examples/spec_block/README.md) 展示附魔书、陶罐与旗帜，[infinity](examples/infinity/README.md) 展示按需生成的无限世界。
 它们直接连接 Go 与 Web 核心，HTTP 接口由各示例自行提供。
 存档浏览、来源缓存和复杂演示见 [neomega-viewer](../../apps/neomega-viewer/README.md)。
@@ -120,7 +120,7 @@ if err := result.Mesh.Marshal(writer); err != nil {
 - **effector 段**：特效消息，例如 `{pos: [3,1,3], effect: "enchanting_table_book"}`。本体照常在 mesher 段里，特效由前端程序驱动。
 - **block actor 段**：按 NBT 生成的几何，坐标已是子区块局部坐标。成功构建的 actor 替换该格的静态本体。
 
-Java 的默认组合由 `javapreset.NewPipeline` 提供，启用附魔书、陶罐和旗帜。陶罐和旗帜在各自构造函数中读取内嵌 PNG，组装入口只需几何表和尺寸。通用 `dispatcher` 不依赖这些具体处理器。`blocks` 是 `*blockdata.Blocks`，包含状态调色板和 N³ 个未压缩索引，实体来自已解码的 Java NBT：
+Java 的默认组合由 `javapreset.NewPipeline` 提供，启用附魔书、陶罐、旗帜和告示牌。各处理器在构造函数中读取内嵌资源，组装入口只需几何表和尺寸。通用 `dispatcher` 不依赖这些具体处理器。`blocks` 是 `*blockdata.Blocks`，包含状态调色板和 N³ 个未压缩索引，实体来自已解码的 Java NBT：
 
 ```go
 layout := cube.New(1)
@@ -152,9 +152,9 @@ if err := result.Frame.Marshal(writer); err != nil {
 
 需要缺失模型占位时，将独立的 `*blockgeometry.Shape` 传给 `javapreset.NewPipeline`。mesher 只在几何表没有对应键时引用它，有键但模型列表为空的状态仍视为有意无几何。中心与邻居使用相同的查表规则，只有中心格产生缺失记录。Pipeline 将多层缺失合并为每格一条 `MissingModel` 诊断。占位为 nil 时缺失 ID 返回错误。[存档浏览器](../../apps/neomega-viewer/cmd/world-viewer/mesh.go) 使用石头形状的洋红副本作为占位，最简示例使用 nil。
 
-新增一种 NBT 方块时，在 `blockactor/` 下新建子包，实现 `blockactor.Handler`，按完整状态和 Compound 返回 `Appearance`，即格内网格与可选私有 RGBA 图片。`blockactor.Dispatcher` 统一复制和平移网格，`javapreset` 负责注册具体处理器。陶罐和旗帜自行持有固定 PNG，并随网格交付所需像素；旗帜的图案先在 Go 合成。接口边界与后续告示牌的接入方式见 [blockactor 说明](blockactor/README.md)。
+新增一种 NBT 方块时，在 `blockactor/` 下新建子包，实现 `blockactor.Handler`，按完整状态和 Compound 返回 `Appearance`，即格内网格与可选私有 RGBA 图片。`blockactor.Dispatcher` 统一复制和平移网格，`javapreset` 负责注册具体处理器。陶罐、旗帜和告示牌自行持有固定资源，并随网格交付所需像素；旗面和文字先在 Go 合成。接口边界与具体接入方式见 [blockactor 说明](blockactor/README.md)。
 
-NVFR v2 携带 actor 的私有图片，Go/TS 解码器仍可读取不含图片的 v1。升级服务时应同时更新前端绘制包。旗帜 NBT、支持范围和示例见 [旗帜说明](blockactor/banner/NBT.md)。
+NVFR v2 携带 actor 的私有图片，Go/TS 解码器仍可读取不含图片的 v1。升级服务时应同时更新前端绘制包。旗帜 NBT、支持范围和示例见 [旗帜说明](blockactor/banner/NBT.md)，双面文字和发光规则见 [告示牌说明](blockactor/sign/NBT.md)。
 
 ## 更新配套几何资源
 
@@ -190,7 +190,7 @@ go generate ./viewer/resources
 
 箱子、床和告示牌等方块的完整外观由游戏代码绘制，JAR 未必包含完整模型。`viewer-assets` 的 `blockRenderers.json` 说明类别并补入社区静态模板，viewer-assets 的建表器通过同一模型接口解析它们。图集 PNG 单独加载，不随每个网格重复传输。
 
-这里的静态指**给定完整状态后，模型姿态固定**。箱子使用固定姿态，告示牌展示牌体。水、岩浆、火等纹理由浏览器按图集帧信息循环播放，几何保持不变。库不接收方块实体的实时外观或动画状态。子区块中的同类流体上方还有流体时，补满当前格的液面高度。这不是游戏的流体曲面模拟。
+这里的静态指**给定完整状态后，模型姿态固定**。箱子使用固定姿态；纯 mesher 入口中的告示牌展示牌体，启用告示牌处理器的 Pipeline 还会添加文字。水、岩浆、火等纹理由浏览器按图集帧信息循环播放，几何保持不变。库不接收方块实体的实时外观或动画状态。子区块中的同类流体上方还有流体时，补满当前格的液面高度。这不是游戏的流体曲面模拟。
 
 动画纹理的全部帧在图集中竖排，Surface 的 Region 覆盖整条区域。生成器直接搬运图集的 Frames 和 FrameTime；后者以 tick 为单位，每 tick 为 1/20 秒。shader 先按时间选择一帧，再在这一帧内重复局部 UV，并按单帧尺寸内缩半像素以免采到相邻帧。静态纹理使用 Frames=1、FrameTime=0。
 

@@ -1,0 +1,58 @@
+{
+  "size_overrides": [
+    {
+      "from": "、",
+      "to": "ヿ",
+      "left": 0,
+      "right": 15
+    },
+    {
+      "from": "㈀",
+      "to": "鿿",
+      "left": 0,
+      "right": 15
+    },
+    {
+      "from": "ᄀ",
+      "to": "ᇿ",
+      "left": 0,
+      "right": 15
+    },
+    {
+      "from": "㄰",
+      "to": "㆏",
+      "left": 0,
+      "right": 15
+    },
+    {
+      "from": "ꥠ",
+      "to": "꥿",
+      "left": 0,
+      "right": 15
+    },
+    {
+      "from": "ힰ",
+      "to": "퟿",
+      "left": 0,
+      "right": 15
+    },
+    {
+      "from": "가",
+      "to": "힯",
+      "left": 1,
+      "right": 15
+    },
+    {
+      "from": "豈",
+      "to": "﫿",
+      "left": 0,
+      "right": 15
+    },
+    {
+      "from": "！",
+      "to": "～",
+      "left": 0,
+      "right": 15
+    }
+  ]
+}

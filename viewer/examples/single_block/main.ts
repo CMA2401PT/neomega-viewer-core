@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   // 2. 请求 Go 生成的二进制结果，解码后创建可以加入 Three.js 场景的对象。
   const response: Response = await fetch(`/api/block?scene=${encodeURIComponent(sceneName)}`);
   if (!response.ok) throw new Error(await response.text());
-  // 所有场景共用解码和绘制链路；旗帜的私有贴图已由 Go 合成，网页不解释 NBT。
+  // 所有场景共用解码和绘制链路；旗面和告示牌文字已由 Go 合成为私有贴图，网页不解释 NBT。
   const binary: ArrayBuffer = await response.arrayBuffer();
   const frameData: FrameData = decodeFrame(binary);
   // registry 把 Go 发来的 effect 名称映射到书本绘制器；actor 已经是网格。

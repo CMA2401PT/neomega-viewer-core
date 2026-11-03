@@ -26,7 +26,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	// 2. 固定处理 1³；Java 预设加载配套贴图并组装书本、陶罐和旗帜处理器。
+	// 2. 固定处理 1³；Java 预设加载配套资源并组装书本、陶罐、旗帜和告示牌处理器。
 	layout := cube.New(1)
 	// 最后一个 nil 表示没有缺失模型的替代形状，遇到未知模型会返回错误。
 	pipeline, err := javapreset.NewPipeline(layout, resources.Tables, nil)
@@ -81,7 +81,7 @@ func main() {
 	log.Fatal(http.ListenAndServe(*listen, mux))
 }
 
-// 每个场景只有一个完整 Java 状态；陶罐与旗帜通过实体 NBT 指定纹样。
+// 每个场景只有一个完整 Java 状态；实体 NBT 指定纹样或文字，按局部坐标绑定到这一格。
 var scenes = map[string]struct {
 	State ir.IRBlock
 	NBT   nbt.Compound
@@ -120,5 +120,49 @@ var scenes = map[string]struct {
 				"minecraft:arms_up_pottery_sherd",
 			},
 		},
+	},
+	"sign": {
+		State: ir.IRBlock(`minecraft:oak_sign ["rotation"="0","waterlogged"="false"]`),
+		// 正反面各有最多四行 messages。这里使用旧 Java 存档常见的 JSON 字符串组件。
+		// color 是整面的染料名；has_glowing_text 用 NBT Byte 表示。拖动相机可看背面。
+		NBT: nbt.Compound{
+			"front_text": nbt.Compound{
+				"messages": []string{`{"text":"你好，世界"}`, `{"text":"Java Sign"}`, `{"text":"红色","color":"red","extra":[{"text":" + 蓝色","color":"blue"}]}`, `{"text":"粗体","bold":true}`},
+				"color":    "black",
+			},
+			"back_text": nbt.Compound{
+				"messages": []string{`{"text":"背面发光"}`, `{"text":"Glow text"}`, `{"text":"斜体","italic":true}`, `{"text":"下划线","underlined":true}`},
+				"color":    "blue", "has_glowing_text": int8(1),
+			},
+		},
+	},
+	"wall_sign": {
+		State: ir.IRBlock(`minecraft:cherry_wall_sign ["facing"="south","waterlogged"="false"]`),
+		// 新 Java 也能直接把文本组件写成 NBT compound，Go 端使用相同的排版入口。
+		NBT: nbt.Compound{"front_text": nbt.Compound{
+			"messages": []nbt.Compound{
+				{"text": "挂墙告示牌"},
+				{"text": "ABC", "color": "#0066FF"},
+				{"text": "删除线", "strikethrough": int8(1)},
+				{"text": "é à ü 中"},
+			},
+			"color": "black",
+		}},
+	},
+	"hanging_sign": {
+		State: ir.IRBlock(`minecraft:spruce_hanging_sign ["attached"="false","rotation"="0","waterlogged"="false"]`),
+		// 悬挂牌的文字更窄；黑色发光文字使用浅色描边，因此在深色木板上仍可辨认。
+		NBT: nbt.Compound{"front_text": nbt.Compound{
+			"messages": []string{"悬挂告示牌", "Black glow", "§n下划线", "§l粗体"},
+			"color":    "black", "has_glowing_text": int8(1),
+		}},
+	},
+	"wall_hanging_sign": {
+		State: ir.IRBlock(`minecraft:birch_wall_hanging_sign ["facing"="south","waterlogged"="false"]`),
+		// § 格式码兼容 Bedrock 转换结果；§k 的连续随机字符区域固定显示一个省略号。
+		NBT: nbt.Compound{"front_text": nbt.Compound{
+			"messages": []string{"墙上悬挂牌", "§a绿色§r复原", "§o斜体", "§k随机字符§r结束"},
+			"color":    "black",
+		}},
 	},
 }
