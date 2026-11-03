@@ -1,5 +1,10 @@
 import * as THREE from "three";
 
+// 这些数值只决定本例的操作手感，与区块边长无关。
+const MOVE_SPEED: number = 16; // 世界方块单位/秒。
+const LOOK_SENSITIVITY: number = 0.003; // 弧度/鼠标像素。
+const MAX_PITCH: number = 1.55; // 略小于 π/2，防止视线翻过头顶。
+
 /** 拖动调整视线，WASD 只沿水平面移动，空格和 Shift 控制升降。 */
 export class FlightControls {
   private readonly keys = new Set<string>();
@@ -10,6 +15,7 @@ export class FlightControls {
   constructor(camera: THREE.PerspectiveCamera, canvas: HTMLCanvasElement) {
     this.camera = camera;
     camera.quaternion.setFromEuler(this.rotation);
+    // 键盘事件绑定在画布上，需要让画布可获得焦点。
     canvas.tabIndex = 0;
     const movementKeys = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ShiftRight"]);
     canvas.addEventListener("keydown", event => {
@@ -26,12 +32,12 @@ export class FlightControls {
     });
     canvas.addEventListener("pointermove", event => {
       if (!canvas.hasPointerCapture(event.pointerId)) return;
-      this.rotation.y -= event.movementX * 0.003;
+      this.rotation.y -= event.movementX * LOOK_SENSITIVITY;
       // 避免翻过头顶，水平移动方向始终由偏航角决定。
       this.rotation.x = THREE.MathUtils.clamp(
-        this.rotation.x - event.movementY * 0.003,
-        -1.55,
-        1.55,
+        this.rotation.x - event.movementY * LOOK_SENSITIVITY,
+        -MAX_PITCH,
+        MAX_PITCH,
       );
       camera.quaternion.setFromEuler(this.rotation);
     });
@@ -41,15 +47,16 @@ export class FlightControls {
 
   /** 使用秒数计算位移，斜向移动与直行保持相同速度。 */
   update(seconds: number): void {
-    const forward = Number(this.keys.has("KeyW")) - Number(this.keys.has("KeyS"));
-    const right = Number(this.keys.has("KeyD")) - Number(this.keys.has("KeyA"));
-    const up = Number(this.keys.has("Space")) - Number(this.keys.has("ShiftLeft") || this.keys.has("ShiftRight"));
-    const yaw = this.rotation.y;
+    const forward: number = Number(this.keys.has("KeyW")) - Number(this.keys.has("KeyS"));
+    const right: number = Number(this.keys.has("KeyD")) - Number(this.keys.has("KeyA"));
+    const up: number = Number(this.keys.has("Space")) - Number(this.keys.has("ShiftLeft") || this.keys.has("ShiftRight"));
+    // Three.js 相机默认朝 -Z；只取偏航角，不让抬头低头改变 WASD 的高度。
+    const yaw: number = this.rotation.y;
     this.direction.set(
       right * Math.cos(yaw) - forward * Math.sin(yaw),
       up,
       -right * Math.sin(yaw) - forward * Math.cos(yaw),
     ).normalize();
-    this.camera.position.addScaledVector(this.direction, seconds * 16);
+    this.camera.position.addScaledVector(this.direction, seconds * MOVE_SPEED);
   }
 }

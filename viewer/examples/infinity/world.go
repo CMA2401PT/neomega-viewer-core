@@ -33,7 +33,7 @@ var (
 	}
 )
 
-// surfaceHeight 根据世界方块坐标生成低丘，跨子区块边界仍然连续。
+// surfaceHeight 用世界方块坐标生成连续低丘；高度在 1..9，摆设放在其上一格，均落在 Y=0 区域。
 func surfaceHeight(x, z int64) int {
 	return 5 + int(math.Floor(2*math.Sin(float64(x)/17)+2*math.Cos(float64(z)/23)))
 }
@@ -46,14 +46,17 @@ func (generatedWorld) Section(_ context.Context, pos dispatcher.SectionPos) (*di
 	if pos.Y != 0 {
 		return nil, nil
 	}
+	// 1. 从空气开始填充完整状态；同一布局决定格子数和 X-Z-Y 索引顺序。
 	section := &dispatcher.Section{
 		Blocks:   blockdata.Uniform(layout.Len(), air),
 		Entities: map[dispatcher.CellPos]nbt.Compound{},
 	}
-	originX, originZ := int64(pos.X)*16, int64(pos.Z)*16
-	for x := 0; x < 16; x++ {
-		for z := 0; z < 16; z++ {
-			top := surfaceHeight(originX+int64(x), originZ+int64(z))
+	var side int = layout.Side()
+	var originX int64 = int64(pos.X) * int64(side)
+	var originZ int64 = int64(pos.Z) * int64(side)
+	for x := 0; x < side; x++ {
+		for z := 0; z < side; z++ {
+			var top int = surfaceHeight(originX+int64(x), originZ+int64(z))
 			for y := 0; y <= top; y++ {
 				state := stone
 				if y == top {
@@ -65,15 +68,18 @@ func (generatedWorld) Section(_ context.Context, pos dispatcher.SectionPos) (*di
 			}
 		}
 	}
-	// 以区块坐标作为随机种子，卸载后再回来仍是同一组摆设。
+	// 2. 以区域坐标作为随机种子，卸载后再回来仍是同一组摆设。
+	// 附魔台放在 X=2..6，陶罐放在 X=10..13，保证两者不重叠且不跨边界。
 	random := rand.New(rand.NewPCG(uint64(int64(pos.X)), uint64(int64(pos.Z))))
-	x, z := 2+random.IntN(5), 2+random.IntN(12)
-	y := surfaceHeight(originX+int64(x), originZ+int64(z)) + 1
+	var x int = 2 + random.IntN(5)
+	var z int = 2 + random.IntN(12)
+	var y int = surfaceHeight(originX+int64(x), originZ+int64(z)) + 1
 	section.Blocks.Set(layout.Index(x, y, z), ir.IRBlock("minecraft:enchanting_table []"))
 	x, z = 10+random.IntN(4), 2+random.IntN(12)
 	y = surfaceHeight(originX+int64(x), originZ+int64(z)) + 1
 	section.Blocks.Set(layout.Index(x, y, z), pots[random.IntN(len(pots))])
-	items := make([]string, 4)
+	// 3. 实体 NBT 关联局部坐标；四片陶片按 back、left、right、front 排列。
+	var items []string = make([]string, 4)
 	for side := range items {
 		items[side] = sherds[random.IntN(len(sherds))]
 	}

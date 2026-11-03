@@ -11,32 +11,40 @@ import (
 	"neomega-viewer-core/viewer/mesher"
 	"neomega-viewer-core/viewer/mesher/geometry"
 	preset "neomega-viewer-core/viewer/resources"
-	viewassets "neomega-viewer-core/viewer/resources"
 )
 
 // 示例中的所有输入共用这一个 16³ 坐标约定。
 var layout = cube.New(16)
 
 func main() {
-	listen := flag.String("listen", "127.0.0.1:2413", "HTTP listen address")
+	var listen *string = flag.String("listen", "127.0.0.1:2413", "HTTP 监听地址")
 	flag.Parse()
-	resources, err := preset.Open(preset.OpenOptions{})
+	// 1. 加载随库内嵌的 Java 几何表；Tables 用状态 ID 查找形状和材质。
+	var resources *preset.Preset
+	var err error
+	resources, err = preset.Open(preset.OpenOptions{})
 	if err != nil {
 		log.Fatal(err)
 	}
+	// 2. 本例只有单层普通方块，直接构建网格；含水、附魔书和陶罐见 single_block。
 	meshBuilder := mesher.NewMesher(layout, resources.Tables)
+	// 3. 每个请求顺序完成数据构造、网格生成与编码。
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/subchunk", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("subchunk") != "default" {
-			http.Error(w, "unknown subchunk", http.StatusNotFound)
+			http.Error(w, "未知子区块", http.StatusNotFound)
 			return
 		}
 		// 每个请求直接构造方块、剔面、合并，再编码成 NVMS 网格。
-		result, err := meshBuilder.MeshLayer(defaultSubchunk(), mesher.Options{})
+		// 空 Options 默认启用剔面与相邻面合并，区域外按空气处理。
+		var result *mesher.Result
+		var err error
+		result, err = meshBuilder.MeshLayer(defaultSubchunk(), mesher.Options{})
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
+		// NVMS 只包含网格；先编码完再响应，编码失败时仍能返回 HTTP 错误。
 		var data bytes.Buffer
 		if err := result.Mesh.Marshal(&data); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -47,20 +55,23 @@ func main() {
 			log.Print(err)
 		}
 	})
-	mux.Handle("GET /textures/", http.StripPrefix("/textures/", http.FileServerFS(viewassets.Resources())))
+	// 4. 同时提供配套贴图和构建后的网页；运行目录须为当前示例目录。
+	mux.Handle("GET /textures/", http.StripPrefix("/textures/", http.FileServerFS(preset.Resources())))
 	mux.Handle("GET /", http.FileServer(http.Dir("dist")))
 	log.Printf("http://%s", *listen)
 	log.Fatal(http.ListenAndServe(*listen, mux))
 }
 
-// 一个 16×16×16 子区块：石头平台、木屋、玻璃窗与阶梯形屋顶。
+// defaultSubchunk 构造石头平台、木屋、玻璃窗与阶梯形屋顶，返回 16³ 个状态 ID。
 func defaultSubchunk() []uint32 {
-	air := ir.IRBlock("minecraft:air []").Hash()
-	stone := ir.IRBlock("minecraft:stone []").Hash()
-	oak := ir.IRBlock("minecraft:oak_planks []").Hash()
-	spruce := ir.IRBlock("minecraft:spruce_planks []").Hash()
-	glass := ir.IRBlock("minecraft:glass []").Hash()
-	blocks := make([]uint32, layout.Len())
+	// 几何表使用规范化 Java 状态的 Hash；这些无属性状态已经规范化。
+	var air uint32 = ir.IRBlock("minecraft:air []").Hash()
+	var stone uint32 = ir.IRBlock("minecraft:stone []").Hash()
+	var oak uint32 = ir.IRBlock("minecraft:oak_planks []").Hash()
+	var spruce uint32 = ir.IRBlock("minecraft:spruce_planks []").Hash()
+	var glass uint32 = ir.IRBlock("minecraft:glass []").Hash()
+	var blocks []uint32 = make([]uint32, layout.Len())
+	// 空气也有自己的状态 ID，不能用 uint32 的零值代替。
 	for i := range blocks {
 		blocks[i] = air
 	}

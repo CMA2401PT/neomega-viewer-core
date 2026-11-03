@@ -1,6 +1,6 @@
 export type Vec3 = [number, number, number];
 export type AlphaMode = "opaque" | "cutout" | "blend";
-/** 子区块以整数坐标定位，场景按每轴 16 个方块放置几何。 */
+/** 区域以整数网格坐标定位；世界方块原点为此坐标乘以 SectionScene 约定的边长。 */
 export interface SectionPos {
   x: number;
   y: number;

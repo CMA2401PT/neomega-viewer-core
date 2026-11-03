@@ -8,10 +8,11 @@
 
 `dispatcher.Pipeline` 是连接网格、特效和实体外观处理器的统一入口。
 示例创建它时传入 `cube.New(1)`，确定每次只处理 1×1×1 个格子。
-`blockdata.Uniform(layout.Len(), state)` 只分配一个索引，输入不携带尺寸，也不填充空气子区块。
+`blockdata.Uniform(layout.Len(), state)` 创建只有一项调色板、一个索引的输入，输入不携带尺寸，也不填充空气子区块。
+这里的 `Section` 只是约定尺寸的区域，名称不要求 16³。
 相同入口使用 `cube.New(16)` 时可以处理世界子区块，含水、特效和陶罐规则保持相同。
 
-方块放在局部原点 `(0,0,0)`，外部邻居按空气处理。
+方块放在局部原点 `(0,0,0)`，外部邻居按空气处理。实体 NBT 也以这个局部坐标关联到方块；只有陶罐场景提供它。
 尺寸约定的是格子数量，模型和书本动画可以超出单位格子，相机会根据实际范围取景。
 
 ## 从请求到绘制
@@ -20,7 +21,7 @@
 
 handler 构造只有一格的完整状态输入，再调用 `Pipeline.Build`。分发器处理含水层的相互遮挡和缩进，为附魔台生成书本消息，并根据陶罐 NBT 替换四面纹样。结果用 `Frame.Marshal` 编码成 NVFR，即包含静态网格、effect 和 actor 网格的完整快照格式。几何表与贴图均来自核心内嵌资源。
 
-为了显示这个快照，[main.ts](main.ts) 使用 `decodeFrame` 解码，通过 `createFrameObject` 创建绘制对象。书本特效由 `createEffectRegistry` 注册。每帧先用 `frame.updateTime` 更新时间，再绘制整个场景，水、火焰和书本因而共享同一个时钟。切换场景直接导航到另一条页面链接。
+为了显示这个快照，[main.ts](main.ts) 使用 `decodeFrame` 解码，通过 `createFrameObject` 创建绘制对象。书本特效由 `createEffectRegistry` 注册。每帧先把回调的毫秒换成秒，用 `frame.updateTime` 更新时间，再绘制整个场景，水、火焰和书本因而共享同一个时钟。切换场景直接导航到另一条页面链接。
 
 ## 运行
 

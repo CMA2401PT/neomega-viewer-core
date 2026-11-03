@@ -8,9 +8,9 @@
 
 为了按位置提供方块，[world.go](world.go) 实现 `dispatcher.SectionSource`，即按子区块坐标返回方块和实体数据的来源。地面和摆设都在 Y=0 子区块内；其他高度是空气。这里的“无限”指水平按需生成，没有预生成的地图边界；坐标仍受整数范围与绘图精度限制。
 
-构建器使用 `cube.New(16)` 固定尺寸，方块输入采用不带尺寸的 `blockdata.Blocks`。
+构建器使用 `cube.New(16)` 固定尺寸，方块输入采用不带尺寸的 `blockdata.Blocks`。网页在 `stream.ts` 通过 `SECTION_SIZE` 约定相同尺寸，坐标换算与 `SectionScene` 都使用它。尺寸属于应用的约定，不随每份快照传输。
 
-为了正确处理相邻地形的遮挡，[main.go](main.go) 调用 `Pipeline.BuildSections` 读取目标及六向邻居。Pipeline 是渲染分发器：普通方块进入网格剔面和合并，陶罐进入 block actor（根据实体数据生成外观的处理器），附魔台额外生成 effect（让网页在指定位置创建动态书本的消息）。结果编码成 NVFR，即包含三种内容的完整快照二进制格式。
+为了正确处理相邻地形的遮挡，[main.go](main.go) 调用 `Pipeline.BuildSections` 读取目标及六向邻居。邻居仅参与边界剔面，返回结果只包含请求的目标区域。Pipeline 是渲染分发器：普通方块进入网格剔面和合并，陶罐进入 block actor（根据实体数据生成外观的处理器），附魔台额外生成 effect（让网页在指定位置创建动态书本的消息）。结果编码成 NVFR，即包含三种内容的完整快照二进制格式。
 
 网页通过 `GET /api/section?x=0&z=0` 请求快照。X/Z 参数使用子区块坐标，Y 固定为 0。服务器只保留共享几何表和图集，不保存生成的地图。
 
@@ -18,7 +18,7 @@
 
 绘制由共享包的 `SectionScene` 管理。它把静态网格和陶罐网格按区域合批，共享材质，进行视锥裁剪和 GPU 遮挡查询，并更新可见书本的动画。[main.ts](main.ts) 只负责把加载器、相机、时钟和绘制核心连接起来。远处的雾遮住加载范围的边缘。
 
-移动控制集中在 [flight.ts](flight.ts)。水平位移由相机的偏航角决定，所以抬头或低头都不会让 WASD 改变高度。位移按帧间隔计算，斜向移动会归一化以保持相同速度。此处是自由飞行，可以穿过地形。
+移动控制集中在 [flight.ts](flight.ts)。水平位移由相机的偏航角决定，所以抬头或低头都不会让 WASD 改变高度。位移按帧间隔计算，斜向移动会归一化以保持相同速度。`MOVE_SPEED` 是每秒移动的方块数，与区块边长无关。此处是自由飞行，可以穿过地形。
 
 ## 运行与操作
 
@@ -40,4 +40,4 @@ go run .
 
 要验证移动和加载规则，在示例目录运行 `npm test`。它检查水平移动、升降、驻留上限、卸载和取消响应。工作区根目录的 `./check.sh neomega-viewer-core` 还会验证地形重建、邻接剔面、陶罐纹样与书本消息。
 
-贴图来源与许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2416/textures/THIRD_PARTY_NOTICES.txt) 和模块的 [NOTICE.md](../../../../apps/neomega-viewer/NOTICE.md)。
+贴图来源与许可见服务提供的 [THIRD_PARTY_NOTICES.txt](http://127.0.0.1:2416/textures/THIRD_PARTY_NOTICES.txt) 和模块的 [NOTICE.md](../../../NOTICE.md)。
