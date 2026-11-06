@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { createActorObject } from "./actor.ts";
 import { createBatchObject } from "./mesh.ts";
 import { createEffectsObject, type EffectRegistry } from "./effects/index.ts";
-import { SurfaceMaterials } from "./materials.ts";
+import { SurfaceMaterials, type SurfaceStyle } from "./materials.ts";
 import type { FrameData, SectionPos } from "./types.ts";
 import type { RenderObject } from "./object.ts";
 import { mergedGeometry, opaqueBatchGroups } from "./batching.ts";
@@ -166,6 +166,7 @@ export class SectionScene {
     effects: EffectRegistry,
     renderer?: THREE.WebGLRenderer,
     sectionSize: number = 16,
+    style?: SurfaceStyle,
   ) {
     // 同一场景使用固定 N³，坐标约定由宿主提供，不从每份快照推断。
     this.sectionSize = sectionSize;
@@ -173,7 +174,7 @@ export class SectionScene {
     this.scene = scene;
     this.atlas = atlas;
     this.effects = effects;
-    this.materials = new SurfaceMaterials(atlas);
+    this.materials = new SurfaceMaterials(atlas, style);
     if (renderer) this.occlusion = new OcclusionQueries(renderer);
   }
 

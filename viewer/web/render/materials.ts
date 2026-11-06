@@ -1,6 +1,16 @@
 import * as THREE from "three";
 import type { Surface } from "./types.ts";
 
+/**
+ * 宿主为整个场景定制外观的扩展点，贴图、批绘制和遮挡流程保持不变。
+ * fragment 须定义 styleSurface：color、alpha 是常规着色结果，可以改写；
+ * worldPosition 是世界坐标，faceUV 是面内 0..1 坐标，faceColor 是贴图中心色。
+ */
+export interface SurfaceStyle {
+  uniforms: Record<string, THREE.IUniform>;
+  fragment: string;
+}
+
 const vertexShader = `
   #include <fog_pars_vertex>
   attribute vec3 color;
@@ -9,6 +19,9 @@ const vertexShader = `
   centroid varying vec2 localUV;
   varying vec3 tint;
   varying vec3 faceNormal;
+  #ifdef SURFACE_STYLE
+    varying vec3 worldPosition;
+  #endif
   #ifdef VERTEX_ATLAS_REGION
     attribute vec4 atlasRegion;
     flat varying vec4 surfaceRegion;
@@ -19,6 +32,9 @@ const vertexShader = `
     #endif
     localUV = uv;
     tint = color;
+    #ifdef SURFACE_STYLE
+      worldPosition = (modelMatrix * vec4(position, 1.0)).xyz;
+    #endif
     // Regional batches bake their translation into positions once on the CPU.
     // No per-vertex matrix-texture lookup is needed for static world geometry.
     faceNormal = normalize(normalMatrix * shadeNormal);
@@ -46,6 +62,10 @@ const fragmentShader = `
   centroid varying vec2 localUV;
   varying vec3 tint;
   varying vec3 faceNormal;
+  #ifdef SURFACE_STYLE
+    varying vec3 worldPosition;
+    /*style*/
+  #endif
   float spriteUV(float value) {
     // Interpolation can put a face endpoint just outside [0,1]. Wrapping that
     // rounding error would draw the bottom texel along a transparent top edge.
@@ -69,7 +89,12 @@ const fragmentShader = `
     if (!gl_FrontFacing) n = -n;
     vec3 lightDirection = normalize(mat3(viewMatrix) * vec3(0.35,0.85,0.5));
     float light = mix(0.48 + 0.52 * max(dot(n, lightDirection), 0.0), 1.0, unlit);
-    gl_FragColor = vec4(texel.rgb * tint * light, alpha);
+    vec3 shaded = texel.rgb * tint * light;
+    #ifdef SURFACE_STYLE
+      vec3 faceColor = texture2D(atlasMap, frameRegion.xy + frameRegion.zw * 0.5).rgb * tint;
+      styleSurface(shaded, alpha, worldPosition, uv, faceColor);
+    #endif
+    gl_FragColor = vec4(shaded, alpha);
     #include <colorspace_fragment>
     #include <fog_fragment>
   }
@@ -80,12 +105,16 @@ export function surfaceMaterial(
   atlas: THREE.Texture,
   time: THREE.IUniform<number>,
   vertexAtlasRegion = false,
+  style?: SurfaceStyle,
 ): THREE.ShaderMaterial {
   const image = atlas.image as { width: number; height: number };
   return new THREE.ShaderMaterial({
     vertexShader,
-    fragmentShader,
-    defines: vertexAtlasRegion ? { VERTEX_ATLAS_REGION: 1 } : {},
+    fragmentShader: style ? fragmentShader.replace("/*style*/", style.fragment) : fragmentShader,
+    defines: {
+      ...(vertexAtlasRegion ? { VERTEX_ATLAS_REGION: 1 } : {}),
+      ...(style ? { SURFACE_STYLE: 1 } : {}),
+    },
     fog: true,
     uniforms: {
       ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
@@ -105,6 +134,8 @@ export function surfaceMaterial(
               : 0.001,
       },
       unlit: { value: surface.unlit ? 1 : 0 },
+      // 不克隆：同一份 uniform 由宿主逐帧更新，所有材质共享。
+      ...style?.uniforms,
     },
     side: surface.doubleSided ? THREE.DoubleSide : THREE.FrontSide,
     transparent: surface.mode === "blend",
@@ -133,9 +164,11 @@ export class SurfaceMaterials {
   private wireframe = false;
 
   private readonly atlas: THREE.Texture;
+  private readonly style?: SurfaceStyle;
 
-  constructor(atlas: THREE.Texture) {
+  constructor(atlas: THREE.Texture, style?: SurfaceStyle) {
     this.atlas = atlas;
+    this.style = style;
   }
 
   get(surface: Surface, vertexAtlasRegion = false): THREE.ShaderMaterial {
@@ -144,7 +177,7 @@ export class SurfaceMaterials {
       : JSON.stringify(surface.region));
     let material = this.cache.get(key);
     if (!material) {
-      material = surfaceMaterial(surface, this.atlas, this.time, vertexAtlasRegion);
+      material = surfaceMaterial(surface, this.atlas, this.time, vertexAtlasRegion, this.style);
       material.wireframe = this.wireframe;
       this.cache.set(key, material);
     }

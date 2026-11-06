@@ -322,6 +322,8 @@ function renderSections(timestamp: number): void {
 
 传入 `renderer` 后，场景可以用 GPU 遮挡查询减少绘制。`render` 统一安排不透明表面、查询和其余表面的绘制顺序。移除单个 section 时调用其 `dispose()`。关闭整组场景时调用 `sectionScene.dispose()` 释放已挂载对象和共享材质。数据读取、加载调度和缺失模型计数由宿主管理。
 
+有时宿主想让整片场景换一种画法，例如线描或扫描光效，同时保留合批、贴图动画和遮挡流程。第六个参数 `style` 为此提供着色扩展：它是一段 GLSL 和配套 uniform，所有共享材质在常规着色之后调用其中的 `styleSurface(color, alpha, worldPosition, faceUV, faceColor)`，可以改写颜色与透明度。uniform 不复制，宿主每帧改写同一份值即可驱动动画。不传时着色器与原先完全相同。
+
 ## 接口与扩展位置
 
 仓库分发的 Java 几何表覆盖 `neomega-blocks/presets/java/v1.JavaCompatibleStates()` 枚举的目标及兼容状态，其状态不带 `waterlogged`。单方块身份查询与几何接口接受该状态集中的 hash。Pipeline 接受完整 Java 状态调色板，包括含水状态，经拆层得到 RSL 后查询几何表。应用演示服务的 hash 输入先反查成完整状态。mesher 本身可以使用调用者提供的其他数值 ID 与表。需要改变固定颜色和材质语义时，在 viewer-assets 建表侧通过 `tablegen.OpenOptions.Policy` 提供 `java_block_model.Policy`，并重新生成表。resources 加载器通过 `OpenOptions.TablesPath` 选择外部资源。

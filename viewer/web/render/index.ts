@@ -24,6 +24,7 @@ export { createFrameObject } from "./frame.ts";
 export type { FrameObject } from "./frame.ts";
 
 export { SurfaceMaterials } from "./materials.ts";
+export type { SurfaceStyle } from "./materials.ts";
 export { SectionScene } from "./section-scene.ts";
 export type { SectionObject } from "./section-scene.ts";
 
