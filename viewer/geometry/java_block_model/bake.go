@@ -111,10 +111,9 @@ func Bake(resolved *Resolved, application Apply, materials FaceMaterials) (geome
 			if err != nil {
 				return geometry.Mesh{}, err
 			}
-			// Holes in a texture do not make the back of a solid element an
-			// additional surface. Keep volume faces front-sided; a standalone
-			// cutout plane can still be viewed from both sides.
-			if surface.Mode == material.Cutout && lo[0] != hi[0] && lo[1] != hi[1] && lo[2] != hi[2] {
+			// 镂空或半透明贴图不会让实体的内侧成为可见表面，否则会透过
+			// 玻璃看到它自身的背面贴图；独立薄片仍保留双面显示。
+			if surface.Mode != material.Opaque && lo[0] != hi[0] && lo[1] != hi[1] && lo[2] != hi[2] {
 				surface.DoubleSided = false
 			}
 			// A plane with explicit front/back faces already has both sides.

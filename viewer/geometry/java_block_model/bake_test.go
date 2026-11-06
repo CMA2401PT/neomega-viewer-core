@@ -103,27 +103,35 @@ func TestElementRotationProducesAPlaneNormal(t *testing.T) {
 	}
 }
 
-func TestCutoutVolumeFacesAndStandalonePlanesHaveDifferentSidedness(t *testing.T) {
+func TestTransparentVolumeFacesAndStandalonePlanesHaveDifferentSidedness(t *testing.T) {
 	pixels := image.NewNRGBA(image.Rect(0, 0, 2, 1))
 	pixels.SetNRGBA(0, 0, color.NRGBA{R: 255, A: 255})
 	library := NewMaterials(Atlas{Width: 2, Height: 1, Textures: map[ResourceID]AtlasTexture{"minecraft:block/stone": {SU: 1, SV: 1}}}, pixels, testPolicy{})
-	for _, check := range []struct {
-		To     Vec3
-		Faces  map[Direction]Face
-		Double bool
+	for _, appearance := range []struct {
+		Block ir.IRBlock
+		Mode  material.Mode
 	}{
-		{Vec3{16, 16, 16}, map[Direction]Face{"north": {Texture: "block/stone"}}, false},
-		{Vec3{16, 16, 0}, map[Direction]Face{"north": {Texture: "block/stone"}}, true},
-		{Vec3{16, 16, 0}, map[Direction]Face{"north": {Texture: "block/stone"}, "south": {Texture: "block/stone"}}, false},
+		{"minecraft:oak_leaves []", material.Cutout},
+		{"minecraft:glass []", material.Blend},
 	} {
-		source := &Resolved{Elements: []Element{{To: check.To, Faces: check.Faces}}}
-		mesh, err := Bake(source, Apply{}, library.ForBlock("minecraft:oak_leaves []"))
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, quad := range mesh.Quads {
-			if quad.Surface.Mode != material.Cutout || quad.Surface.DoubleSided != check.Double {
-				t.Fatalf("incorrect cutout sidedness: %+v", quad.Surface)
+		for _, check := range []struct {
+			To     Vec3
+			Faces  map[Direction]Face
+			Double bool
+		}{
+			{Vec3{16, 16, 16}, map[Direction]Face{"north": {Texture: "block/stone"}}, false},
+			{Vec3{16, 16, 0}, map[Direction]Face{"north": {Texture: "block/stone"}}, true},
+			{Vec3{16, 16, 0}, map[Direction]Face{"north": {Texture: "block/stone"}, "south": {Texture: "block/stone"}}, false},
+		} {
+			source := &Resolved{Elements: []Element{{To: check.To, Faces: check.Faces}}}
+			mesh, err := Bake(source, Apply{}, library.ForBlock(appearance.Block))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, quad := range mesh.Quads {
+				if quad.Surface.Mode != appearance.Mode || quad.Surface.DoubleSided != check.Double {
+					t.Fatalf("%s 的材质模式或单双面设置不正确: %+v", appearance.Block, quad.Surface)
+				}
 			}
 		}
 	}
