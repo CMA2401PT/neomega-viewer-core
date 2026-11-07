@@ -6,7 +6,8 @@
 
 ## 输入与职责
 
-`viewer/javastates` 组合 `neomega-blocks/presets/java/v26_3` 的 Java 状态和旧版兼容映射。
+`neomega-blocks/presets/java/v1` 提供 Java 目标状态全集和历史状态兼容映射。
+目标版本由该包的 `JavaTargetVersion` 定义（当前为 26.3），资源构建与几何建表共用这一来源。
 `viewer/geometry/java_block_model` 解析模型并烘焙局部形状，`viewer/geometry` 计算覆盖并保存共享形状。
 普通物品由 `viewer/item_render` 编译，应用继承后的 `fixed` 展示变换；generated 模型按纹理透明轮廓挤出侧壁。
 `internal/tablegen` 组合这些能力，`internal/resources` 补充固定染色、流体预览和透明材质策略。
@@ -25,10 +26,11 @@
 在 `neomega-viewer-core/viewer-assets` 准备资源：
 
 ```sh
-go run ./cmd/neomega-assets build -jar .cache/26.3/client.jar
+go run ./cmd/neomega-assets build
 ```
 
-没有本地 JAR 时可使用 `build -version 26.3` 下载。提交资源使用的固定客户端校验值、Wiki 覆盖恢复和告示牌图片同步步骤见 [26.3 资源复现](../../REBUILD-26.3.md)。
+`build -version` 默认取 `JavaTargetVersion`，命令会下载对应客户端。已有本地 JAR 时，可用 `build -jar /path/to/client.jar -work dist/works -out dist/final` 准备同样的输入。
+固定图片随处理器维护，取自同一目标客户端的对应资源路径。
 然后在 `neomega-viewer-core` 模块根目录执行：
 
 ```sh

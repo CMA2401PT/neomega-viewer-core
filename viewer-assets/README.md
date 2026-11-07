@@ -4,7 +4,7 @@
 
 理解整个流程，只需要先记住：**方块状态选择模型，模型引用纹理，图集坐标表告诉渲染器去 PNG 的哪里取这张纹理。** 但箱子、旗帜等方块的外形由游戏代码绘制，JAR 中没有完整方块模型。本工具为它们补充静态预览，并用另一张表说明完整渲染还需要什么数据。
 
-一次构建处理一个版本。默认使用 **Minecraft Java 1.21.4**，与 `neomega-blocks` 的 Java 输出目标一致，版本来自 [Mojang 官方版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)。版本信息记录在 `build-info.json` 中，数据表直接保存这个版本的内容。
+一次构建处理一个版本。默认目标来自 `neomega-blocks/presets/java/v1.JavaTargetVersion`（当前为 **Minecraft Java 26.3**），使模型和图集与 Java 状态知识保持一致。客户端下载信息来自 [Mojang 官方版本清单](https://piston-meta.mojang.com/mc/game/version_manifest_v2.json)。版本信息记录在 `build-info.json` 中，数据表直接保存这个版本的内容。
 
 ## 先得到一份输出
 
@@ -13,16 +13,16 @@
 在 `neomega-viewer-core/viewer-assets` 目录执行：
 
 ```sh
-go run ./cmd/neomega-assets build -version 1.21.4
+go run ./cmd/neomega-assets build
 ```
 
-命令下载客户端到 `.cache/1.21.4/client.jar`，然后依次运行五步。已经有 JAR 时，可以直接指定：
+命令按默认目标版本下载客户端到 `.cache/<版本>/client.jar`，然后依次运行五步。已经有 JAR 时，可以直接指定：
 
 ```sh
 go run ./cmd/neomega-assets build -jar /path/to/client.jar
 ```
 
-可以用 `-version` 显式选择其他版本，或用 `-version latest` 跟随最新正式版。与 `neomega-blocks` 配套时，应使用它的 `JavaTargetVersion` 对应版本。需要复现结果时，指定版本或固定的本地 JAR。
+可以用 `-version` 显式选择其他版本，或用 `-version latest` 跟随最新正式版。与 `neomega-blocks` 配套时，应使用 `presets/java/v1.JavaTargetVersion` 对应版本。需要复现结果时，指定版本或固定的本地 JAR。
 
 完成后，`dist/final` 中有以下配套产物：
 
@@ -93,9 +93,9 @@ go run ./cmd/inspect-resources -dir dist/final \
 整理模型前，需要先知道资源在哪里。`s01_extract` 提取相关文件，并建立 `snapshot.json` 资源索引：
 
 ```sh
-go run ./cmd/neomega-assets fetch -version 1.21.4
+go run ./cmd/neomega-assets fetch
 go run ./cmd/neomega-assets extract \
-  -jar .cache/1.21.4/client.jar \
+  -jar .cache/26.3/client.jar \
   -out dist/works/01-extracted
 ```
 
@@ -153,7 +153,7 @@ go run ./cmd/neomega-assets models \
 
 这一步生成 `blockstates.json`、`models.json`，以及独立的检查报告 `model-index.json`。它检查方块实际引用的模型、父模型和纹理变量，遇到缺失模型或循环时报告资源名。报告列出需要的纹理，并在 `geometrylessBlockStates` 中列出没有任何面的方块。
 
-**没有缺失引用，不代表方块已经能显示。** 1.21.4 的原始资源中有 144 种方块没有几何。箱子可能只有粒子纹理；空气本来就不可见；水则需要根据邻居生成表面。仅统计 `builtin/...` 父模型识别不了这些情况，这也是第四步存在的原因。
+**没有缺失引用，不代表方块已经能显示。** 原始资源中仍有一些方块没有几何。箱子可能只有粒子纹理；空气本来就不可见；水则需要根据邻居生成表面。仅统计 `builtin/...` 父模型识别不了这些情况，这也是第四步存在的原因。
 
 输出保留继承、变体、权重和逻辑条件。解析用于检查关系和收集纹理，具体选择仍由消费者根据方块状态完成。
 
@@ -238,33 +238,37 @@ go run ./cmd/neomega-assets audit \
   -snapshot dist/works/01-extracted \
   -raw-models dist/works/03-models \
   -completed dist/works/04-renderers \
-  -out resources/audits/1.21.4-vs-viewer.json
+  -out resources/audits/target-vs-viewer.json
 ```
 
 这条命令检查原始 JAR 的方块纹理是否全部收录、所需纹理是否存在、PNG 尺寸与坐标是否一致，并比较补全前后的几何覆盖。全部差异名称保存在 JSON 中。**它检查资源覆盖，不等同于运行游戏渲染器逐像素比对外观。**
 
-下表的构建统计可由 `build -jar .cache/1.21.4/client.jar` 复现，不添加覆盖包。旧 viewer 对照数量来自随库保存的 [核对报告](resources/audits/1.21.4-vs-viewer.json)，重新核对需要上述历史输入目录：
+下表来自目标版本 Java 26.3 客户端的构建，可在本目录执行以下命令复现。原始数量取自 `dist/works/01-extracted/snapshot.json`，输出数量取自 `dist/final/build-info.json`，尺寸取自 `dist/final/blocksAtlasLatest.png`：
+
+```sh
+go run ./cmd/neomega-assets build \
+  -jar .cache/26.3/client.jar \
+  -work dist/works \
+  -out dist/final
+```
 
 | 项目 | 结果 |
 |---|---:|
-| JAR 方块状态 / 模型 / PNG | 1,097 / 3,289 / 3,185 |
-| 输出方块状态 / 模型 | 1,099 / 3,513 |
-| 原生模型 / 特殊静态预览 | 955 / 134 |
+| JAR 方块状态 / 模型 / PNG | 1,288 / 4,192 / 3,964 |
+| 输出方块状态 / 模型 | 1,290 / 4,357 |
+| 原生模型 / 特殊静态预览 | 1,194 / 86 |
 | 流体 / 不可见 / 运行时动态 | 3 / 6 / 1 |
-| 原始 JAR 方块纹理收录 | 1,039 / 1,039 |
-| 最终图集纹理数 / 尺寸 | 1,603 / 2048×1024 |
-| 旧表可见、原始模型无几何的方块 | 127 |
-| 补全后仍存在上述缺口的方块 | 0 |
+| 最终图集纹理数 / 尺寸 | 2,080 / 2048×1024 |
 
 模型统计包含 block/item 模型及导入的模板依赖；PNG 统计包含实体与其他类别，因此这些数量不应相等。输出状态额外包含两个诊断方块。
 
-旧 viewer 图集中的 337 个名称在 1.21.4 JAR 中已不存在，其中包括历史名称和旧版纹理布局。不能用旧图集的名称集合直接要求单版本输出。具体核对结果见 [resources/audits/README.md](resources/audits/README.md)。
+旧 viewer 的历史名称和纹理布局可能与目标 JAR 不同，覆盖核对应比较具体资源及其用途。历史输入和核对结果见 [resources/audits/README.md](resources/audits/README.md)。
 
 ## 与 mc-viewer-svelte 衔接
 
 资源生成完整之后，还需要消费者理解相应格式。资源命名、图集文件名和 UV 字段参考 `mc-assets`，但本工具交付拆开的单版本表。旧 viewer 需要按完整资源 ID 查询模型与纹理，并将合并文件和 `latest` 包装层改为读取 `blockstates.json`、`models.json` 与展开的 `blocksAtlases.json`。`blockRenderers.json` 补充特殊渲染需求。
 
-历史外部项目 mc-viewer-svelte 的方块状态数据基于 Java `1.20.2`；这不是本工作区 viewer-core 的版本。要显示 1.21.4 资源，需要同步更新状态数据与模型消费者，并接入渲染说明表。
+历史外部项目 mc-viewer-svelte 的方块状态数据基于 Java `1.20.2`；这不是本工作区 viewer-core 的版本。要显示目标版本资源，需要同步更新状态数据与模型消费者，并接入渲染说明表。
 
 消费者完成适配后，整组替换产物，再在 viewer 运行 `pnpm generate`。viewer 的 `rtids.json` 和渲染数据仍由它自己的生成流程负责。
 
@@ -302,7 +306,7 @@ go test -race ./...
 go vet ./...
 ```
 
-测试位于 `utils/integration` 与各步骤目录。测试现场创建小型 JAR 和 PNG，覆盖最终文件解析、五步产物、箱子占位模型补全、未知空模型报错、命名空间、资源覆盖、模型继承、1.21.4 纹理对象、加权候选、逻辑条件、动画多帧顺序和帧时、图集空隙利用和像素坐标。测试不访问网络。
+测试位于 `utils/integration` 与各步骤目录。测试现场创建小型 JAR 和 PNG，覆盖最终文件解析、五步产物、箱子占位模型补全、未知空模型报错、命名空间、资源覆盖、模型继承、现代纹理对象、加权候选、逻辑条件、动画多帧顺序和帧时、图集空隙利用和像素坐标。测试不访问网络。
 
 ## 来源与许可
 

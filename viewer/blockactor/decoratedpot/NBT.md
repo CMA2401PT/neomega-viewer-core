@@ -47,7 +47,7 @@
           "minecraft:blade_pottery_sherd", "minecraft:arms_up_pottery_sherd"]}
 ```
 
-处理器同时接受 compound 和列表形式，结果相同。上面的 26.3 样本只能确认该版本使用 compound。Java 1.21.4 是否已使用 compound 尚未核实。
+处理器同时接受目标版本的 compound 和早期存档的列表形式，结果相同。
 
 ## 四个面朝向哪里
 
