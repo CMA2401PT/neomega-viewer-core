@@ -24,13 +24,13 @@ func TestFixedDisplayModelSelection(t *testing.T) {
 		if err := json.Unmarshal([]byte(data), &definition); err != nil {
 			t.Fatal(err)
 		}
-		if id, err := fixedItemReference(&definition); err != nil || id != "example:fixed" {
-			t.Fatalf("%s: %s, %v", data, id, err)
+		if id, err := fixedItemReference(&definition); err != nil || id.ID != "example:fixed" {
+			t.Fatalf("%s: %s, %v", data, id.ID, err)
 		}
 	}
 	for _, data := range []string{
 		`{"type":"minecraft:condition","property":"example:unknown","on_false":{"type":"minecraft:model","model":"example:wrong"}}`,
-		`{"type":"minecraft:model","model":"example:wrong","tints":[{"type":"minecraft:constant","value":123}]}`,
+		`{"type":"minecraft:model","model":"example:wrong","tints":[{"type":"minecraft:dye","default":123}]}`,
 		`{"type":"minecraft:select","property":"minecraft:display_context","cases":[]}`,
 	} {
 		var definition staticItemModel
@@ -70,5 +70,16 @@ func TestItemsUseExplicitModelReference(t *testing.T) {
 	delete(models, "example:arbitrary/path")
 	if _, err := staticItems(snapshot, dir, models, map[model.ResourceID]bool{}); err == nil {
 		t.Fatal("missing explicit model was silently skipped")
+	}
+}
+
+func TestConstantTintSurvivesFixedSelection(t *testing.T) {
+	var definition staticItemModel
+	if err := json.Unmarshal([]byte(`{"type":"minecraft:condition","property":"minecraft:using_item","on_false":{"type":"minecraft:model","model":"example:leaf","tints":[{"type":"minecraft:constant","value":-12012264}]}}`), &definition); err != nil {
+		t.Fatal(err)
+	}
+	got, err := fixedItemReference(&definition)
+	if err != nil || got.ID != "example:leaf" || len(got.Tints) != 1 || got.Tints[0]&0xffffff != 0x48b518 {
+		t.Fatalf("selection=%+v err=%v", got, err)
 	}
 }

@@ -15,6 +15,7 @@ func generated(resolved *model.Resolved, atlas model.Atlas, pixels image.Image) 
 			break
 		}
 		ref := model.TextureRef("#" + slot)
+		tint := layer
 		id, _, err := resolved.Texture(ref)
 		if err != nil {
 			return nil, err
@@ -39,7 +40,7 @@ func generated(resolved *model.Resolved, atlas model.Atlas, pixels image.Image) 
 			return false
 		}
 		elements = append(elements, model.Element{From: model.Vec3{0, 0, 7.5}, To: model.Vec3{16, 16, 8.5}, Faces: map[model.Direction]model.Face{
-			"north": {Texture: ref, UV: &model.UV{16, 0, 0, 16}}, "south": {Texture: ref, UV: &model.UV{0, 0, 16, 16}},
+			"north": {Texture: ref, TintIndex: &tint, UV: &model.UV{16, 0, 0, 16}}, "south": {Texture: ref, TintIndex: &tint, UV: &model.UV{0, 0, 16, 16}},
 		}})
 		// 横向扫描上下边，纵向扫描左右边；相连边共享一张面，UV 采样轮廓像素中心。
 		for _, side := range []model.Direction{"up", "down", "west", "east"} {
@@ -93,7 +94,7 @@ func generated(resolved *model.Resolved, atlas model.Atlas, pixels image.Image) 
 						u := (float64(row) + .5) * 16 / float64(width)
 						uv = model.UV{u, float64(start) * 16 / float64(height), u, float64(col) * 16 / float64(height)}
 					}
-					elements = append(elements, model.Element{From: from, To: to, Faces: map[model.Direction]model.Face{side: {Texture: ref, UV: &uv}}})
+					elements = append(elements, model.Element{From: from, To: to, Faces: map[model.Direction]model.Face{side: {Texture: ref, TintIndex: &tint, UV: &uv}}})
 				}
 			}
 		}

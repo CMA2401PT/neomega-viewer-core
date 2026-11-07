@@ -67,7 +67,7 @@ with zipfile.ZipFile(root / "client.jar") as client:
             (target / f"block_{wood}_{suffix}.png").write_bytes(data)
 ```
 
-构建输出为 24,463 个 Java hash、8,449 种共享形状、1,547 项静态物品、2 个框体模型；图集包含 2,080 项纹理。12 个移动活塞状态没有静态模型，111 项复杂物品定义保留不支持原因。
+构建输出为 24,463 个 Java hash、8,449 种共享形状、1,559 项静态物品、2 个框体模型；图集包含 2,080 项纹理。12 个移动活塞状态没有静态模型，99 项复杂物品定义保留不支持原因。
 
 验证命令（模块根目录，POSIX shell）：
 

@@ -24,7 +24,7 @@ func (engine *Builder) BuildItems(assetsDir string) (*item_render.Catalog, error
 		if err != nil {
 			return nil, err
 		}
-		mesh, err := item_render.Bake(resolved, engine.Bundle.Atlas, engine.Bundle.AtlasImage)
+		mesh, err := item_render.Bake(resolved, engine.Bundle.Atlas, engine.Bundle.AtlasImage, definitions.Tints[id]...)
 		if errors.Is(err, item_render.ErrUnsupportedModel) {
 			catalog.Unsupported[id] = err.Error()
 			continue
