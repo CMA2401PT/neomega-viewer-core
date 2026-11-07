@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"neomega-blocks/ir"
-	java "neomega-blocks/presets/java/v1"
+	java "neomega-viewer-core/viewer/javastates"
 )
 
 type JavaBlockHash = uint32

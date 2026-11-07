@@ -47,7 +47,7 @@ func TestSignPipelineWaterAndSnapshot(t *testing.T) {
 		if q.Surface.Texture == "minecraft:block/water_still" || q.Surface.Texture == "minecraft:block/water_flow" {
 			water = true
 		}
-		if q.Surface.Texture == "minecraft:entity/signs/oak" {
+		if q.Surface.Texture == "minecraft:block/oak_sign" {
 			wood = true
 		}
 	}

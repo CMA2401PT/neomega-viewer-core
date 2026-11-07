@@ -11,7 +11,7 @@ Go 解析两面的文本组件，使用内嵌的 Java 默认字体生成文字�
 
 ## 输入与双面文字
 
-支持 Java 1.21.4 的 12 种木材，以及立式、挂墙、悬挂、墙上悬挂四种形态。
+支持 Java 26.3 的 13 种木材（含杨木 poplar），以及立式、挂墙、悬挂、墙上悬挂四种形态。
 完整状态决定木材、朝向、链条形态和是否含水。
 含水层仍由 Pipeline 拆分，处理器只生成牌体与文字。
 
@@ -85,7 +85,7 @@ Unicode 码点直接作为索引，因此非 BMP 字符不会拆成两个字。
 ## 依据与资源来源
 
 排版、文字变换和发光规则核对了本地 Java 26.3 客户端的 `AbstractSignRenderer`、`StandingSignRenderer`、`HangingSignRenderer`、`BitmapProvider` 与 `UnihexProvider`。
-字体与木纹仍固定使用配套几何所属的 Java 1.21.4 资源。
+字体保留原有 Java 1.21.4 资源；木纹支持配套几何所属的 Java 26.3 `block/*_sign`、`block/*_hanging_sign` 路径，并保留旧实体纹理供旧模板使用。
 `font/bitmap.json` 保留原版的位图提供器配置；`font/unifont.json` 只保存默认非日文字体的宽度覆盖表。
 Unifont ZIP 保留原始字体与许可证，包外也附有 [许可证原文](font/UNIFONT-LICENSE.txt)。
 素材许可见模块的 [NOTICE.md](../../../NOTICE.md)。
