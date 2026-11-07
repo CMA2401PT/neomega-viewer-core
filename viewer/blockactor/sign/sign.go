@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"neomega-blocks/ir"
+	java "neomega-blocks/presets/java/v1"
 	"neomega-viewer-core/viewer/blockactor"
 	"neomega-viewer-core/viewer/blockactor/internal/pngtextures"
 	"neomega-viewer-core/viewer/cube"
@@ -37,11 +38,7 @@ func New(tables *core.Tables[uint32]) (*Handler, error) {
 	}
 	textures := make(map[string]blockactor.Texture, len(images))
 	for name, img := range images {
-		path := strings.Replace(name, "hanging_", "hanging/", 1)
-		id := "minecraft:entity/signs/" + path
-		if strings.HasPrefix(name, "block_") {
-			id = "minecraft:block/" + strings.TrimPrefix(name, "block_")
-		}
+		id := "minecraft:block/" + name
 		textures[id] = blockactor.Texture{Name: id, Width: uint32(img.Rect.Dx()), Height: uint32(img.Rect.Dy()), Pixels: img.Pix}
 	}
 	font, err := loadFont()
@@ -52,10 +49,14 @@ func New(tables *core.Tables[uint32]) (*Handler, error) {
 }
 
 func (h *Handler) BlockNames() []string {
+	// 从目标状态收集牌体名称，使处理器与几何表使用相同的木材和形态。
 	var names []string
-	for _, wood := range []string{"oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo", "crimson", "warped", "pale_oak", "poplar"} {
-		for _, suffix := range []string{"_sign", "_wall_sign", "_hanging_sign", "_wall_hanging_sign"} {
-			names = append(names, "minecraft:"+wood+suffix)
+	seen := make(map[string]bool)
+	for state := range java.JavaFullStates() {
+		name := state.NameWithNameSpace()
+		if strings.HasSuffix(name, "_sign") && !seen[name] {
+			names = append(names, name)
+			seen[name] = true
 		}
 	}
 	return names

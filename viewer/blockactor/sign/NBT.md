@@ -11,7 +11,8 @@ Go 解析两面的文本组件，使用内嵌的 Java 默认字体生成文字�
 
 ## 输入与双面文字
 
-支持 Java 26.3 的 13 种木材（含杨木 poplar），以及立式、挂墙、悬挂、墙上悬挂四种形态。
+支持 `neomega-blocks/presets/java/v1.JavaFullStates()` 中的所有告示牌，包括立式、挂墙、悬挂、墙上悬挂四种形态。
+木材由状态名称推导；当前目标 Java 26.3 包含 13 种木材（含杨木 poplar）。
 完整状态决定木材、朝向、链条形态和是否含水。
 含水层仍由 Pipeline 拆分，处理器只生成牌体与文字。
 
@@ -46,7 +47,7 @@ entity := nbt.Compound{
 
 ## 排版与发光
 
-字体资源取自 Java 1.21.4 的默认位图字体和 Unifont 16.0.01。
+字体资源取自目标版本客户端的默认位图字体，以及官方资源索引提供的 Unifont 16.0.01。
 字形选择依次使用空格定义、原版位图字符表和 Unifont，保留对应字宽、重音偏移、中文宽度覆盖与粗体偏移。
 Unicode 码点直接作为索引，因此非 BMP 字符不会拆成两个字。
 文字以半个 Java 字体单位为一个像素烘焙，固定图片不依赖宿主系统字体。
@@ -84,9 +85,11 @@ Unicode 码点直接作为索引，因此非 BMP 字符不会拆成两个字。
 
 ## 依据与资源来源
 
-排版、文字变换和发光规则核对了本地 Java 26.3 客户端的 `AbstractSignRenderer`、`StandingSignRenderer`、`HangingSignRenderer`、`BitmapProvider` 与 `UnihexProvider`。
-字体保留原有 Java 1.21.4 资源；木纹支持配套几何所属的 Java 26.3 `block/*_sign`、`block/*_hanging_sign` 路径，并保留旧实体纹理供旧模板使用。
-`font/bitmap.json` 保留原版的位图提供器配置；`font/unifont.json` 只保存默认非日文字体的宽度覆盖表。
+排版、文字变换和发光规则依据目标版本客户端的 `AbstractSignRenderer`、`StandingSignRenderer`、`HangingSignRenderer`、`BitmapProvider` 与 `UnihexProvider`。
+牌体纹理取自目标版本客户端的 `assets/minecraft/textures/block/{wood}_sign.png` 和 `{wood}_hanging_sign.png`。
+本包 `textures/` 保留对应文件名，处理器以 `minecraft:block/<文件名去掉 .png>` 绑定几何材质。
+位图字体取自同一客户端的 `assets/minecraft/textures/font/`。
+`font/bitmap.json` 保留客户端 `assets/minecraft/font/include/default.json` 的位图提供器配置；`font/unifont.json` 只保存默认非日文字体的宽度覆盖表。
 Unifont ZIP 保留原始字体与许可证，包外也附有 [许可证原文](font/UNIFONT-LICENSE.txt)。
 素材许可见模块的 [NOTICE.md](../../../NOTICE.md)。
 

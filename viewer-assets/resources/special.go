@@ -6,12 +6,14 @@ package resources
 import (
 	"strings"
 
+	java "neomega-blocks/presets/java/v1"
 	"neomega-viewer-core/viewer-assets/asset"
 	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
 )
 
-// JavaTargetVersion is the Java version shipped by the preview build.
-const JavaTargetVersion = "26.3"
+// JavaTargetVersion is aligned with neomega-blocks' Java state preset.
+// 资源必须与 neomega-blocks 的 Java 状态版本一致，模型和状态才能配套查询。
+const JavaTargetVersion = java.JavaTargetVersion
 
 // NonModelRenderer identifies supported vanilla blocks without static geometry.
 // The pipeline itself handles minecraft:air.

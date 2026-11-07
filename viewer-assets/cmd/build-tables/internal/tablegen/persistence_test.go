@@ -15,6 +15,7 @@ import (
 	javasolid "neomega-viewer-core/fixer/solidtable/preset"
 	"neomega-viewer-core/viewer/geometry"
 	blockmesh "neomega-viewer-core/viewer/resources"
+	"neomega-viewer-core/viewer/topview"
 )
 
 func TestPersistedTablesMatchBuild(t *testing.T) {
@@ -56,6 +57,25 @@ func TestPersistedTablesMatchBuild(t *testing.T) {
 	}
 	if len(want.Solid) != len(want.Index) {
 		t.Fatal("solid table and geometry index contain different numbers of states")
+	}
+	var colorBytes bytes.Buffer
+	if err := want.Colors.Encode(&colorBytes); err != nil {
+		t.Fatal(err)
+	}
+	colors, err := topview.Decode(bytes.NewReader(colorBytes.Bytes()))
+	if err != nil || !maps.Equal(colors, want.Colors) {
+		t.Fatalf("roundtrip color table differs: error=%v", err)
+	}
+	embeddedColors, err := topview.Bundled()
+	if err != nil || !maps.Equal(embeddedColors, colors) {
+		t.Fatalf("embedded color table differs: error=%v", err)
+	}
+	committedColors, err := os.ReadFile("../../../../../viewer/topview/colors.nvcolor")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(committedColors, colorBytes.Bytes()) {
+		t.Fatal("committed color table differs")
 	}
 	path := filepath.Join(t.TempDir(), "geometry.nvtables")
 	file, err := os.Create(path)

@@ -4,7 +4,7 @@
 
 ## 依赖与职责
 
-本模块只依赖 `neomega-blocks` 和 `neomega-nbt`。不要引入 `neomega-converter-core`、世界存储或应用模块。存档转换的组合在 `apps/neomega-converter`，存档浏览与加载调度在 `apps/neomega-viewer`。
+本模块只依赖 `neomega-blocks` 和 `neomega-nbt`。不要引入 `neomega-converter-core`、世界存储或应用模块。存档转换的组合在 `apps/neomega-converter`，三维浏览与加载调度在 `apps/neomega-viewer`，俯视图浏览在 `apps/neomega-topviewer`。
 
 `viewer/` 保存运行时渲染、前端绘制包和直接连接两端的示例。`viewer-assets/` 保存模型、图集与查询表的生成工具。`fixer/java-postprocess/` 根据邻居重算属性，`fixer/solidtable/` 保存实心表格式和预置数据。
 
@@ -16,7 +16,7 @@
 go generate ./viewer/resources
 ```
 
-几何中的 UV 与公共图集必须配套更新。特殊处理器的固定资源随其代码维护；新增 NBT 外观处理器前阅读 [处理器说明](viewer/blockactor/README.md)。
+几何中的 UV、公共图集与 `viewer/topview/colors.nvcolor` 颜色表必须配套更新。特殊处理器的固定资源随其代码维护；新增 NBT 外观处理器前阅读 [处理器说明](viewer/blockactor/README.md)。
 
 示例保持独立可读。最小 Go 用法在 `examples/mesh`，浏览器基础用法在 `viewer/examples/basic`。修改前端示例后，在相应目录执行 `npm ci` 与 `npm run build`，再启动 Go 服务检查网页及二进制接口。
 
