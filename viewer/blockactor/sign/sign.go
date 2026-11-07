@@ -39,6 +39,9 @@ func New(tables *core.Tables[uint32]) (*Handler, error) {
 	for name, img := range images {
 		path := strings.Replace(name, "hanging_", "hanging/", 1)
 		id := "minecraft:entity/signs/" + path
+		if strings.HasPrefix(name, "block_") {
+			id = "minecraft:block/" + strings.TrimPrefix(name, "block_")
+		}
 		textures[id] = blockactor.Texture{Name: id, Width: uint32(img.Rect.Dx()), Height: uint32(img.Rect.Dy()), Pixels: img.Pix}
 	}
 	font, err := loadFont()
@@ -50,7 +53,7 @@ func New(tables *core.Tables[uint32]) (*Handler, error) {
 
 func (h *Handler) BlockNames() []string {
 	var names []string
-	for _, wood := range []string{"oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo", "crimson", "warped", "pale_oak"} {
+	for _, wood := range []string{"oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "bamboo", "crimson", "warped", "pale_oak", "poplar"} {
 		for _, suffix := range []string{"_sign", "_wall_sign", "_hanging_sign", "_wall_hanging_sign"} {
 			names = append(names, "minecraft:"+wood+suffix)
 		}

@@ -10,8 +10,8 @@ import (
 	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
 )
 
-// JavaTargetVersion is aligned with neomega-blocks' existing conversion preset.
-const JavaTargetVersion = "1.21.4"
+// JavaTargetVersion is the Java version shipped by the preview build.
+const JavaTargetVersion = "26.3"
 
 // NonModelRenderer identifies supported vanilla blocks without static geometry.
 // The pipeline itself handles minecraft:air.

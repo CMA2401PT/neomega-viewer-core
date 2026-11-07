@@ -89,11 +89,12 @@ func (r *Renderer) frame(entity Entity) (geometry.Mesh, error) {
 			id, ok := item["id"].(string)
 			if !ok {
 				itemErr = fmt.Errorf("item frame Item.id must be a string")
-			} else if components, exists := item["components"]; exists && components != nil {
-				itemErr = fmt.Errorf("unsupported item components for %s", id)
 			} else {
 				var mesh geometry.Mesh
-				mesh, itemErr = r.items.Render(id)
+				id, itemErr = frameItemModel(id, item["components"])
+				if itemErr == nil {
+					mesh, itemErr = r.items.Render(id)
+				}
 				if itemErr == nil {
 					rotation := int8(0)
 					if value, present := entity.NBT["ItemRotation"]; present {

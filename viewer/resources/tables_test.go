@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	java "neomega-blocks/presets/java/v1"
+	java "neomega-viewer-core/viewer/javastates"
 	blockgeometry "neomega-viewer-core/viewer/geometry"
 )
 

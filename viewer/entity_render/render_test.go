@@ -2,6 +2,7 @@ package entity_render_test
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	nbt "neomega-nbt/presets/v1"
@@ -9,6 +10,54 @@ import (
 	"neomega-viewer-core/viewer/geometry"
 	"neomega-viewer-core/viewer/item_render"
 )
+
+func TestFrameItemComponents(t *testing.T) {
+	body := geometry.Mesh{Quads: []geometry.Quad{{}}}
+	item := geometry.Mesh{Quads: []geometry.Quad{{Color: [3]float32{.2, .4, .6}}}}
+	catalog := &item_render.Catalog{Items: map[string]geometry.Mesh{"minecraft:diamond_sword": item}, Models: map[string]geometry.Mesh{"minecraft:block/item_frame": body}}
+	renderer := entity_render.New(catalog, item_render.New(catalog))
+	for _, components := range []any{nil, nbt.Compound{}, nbt.Compound{
+		"minecraft:custom_name": nbt.Compound{"text": "展示用"},
+		"minecraft:lore":        []string{"说明"}, "minecraft:damage": int32(12),
+		"minecraft:enchantments": nbt.Compound{"minecraft:sharpness": int32(5)},
+	}, nbt.Compound{"minecraft:item_model": "diamond_sword"}} {
+		id := "minecraft:diamond_sword"
+		values, _ := components.(nbt.Compound)
+		if _, override := values["minecraft:item_model"]; override {
+			id = "minecraft:stick"
+		}
+		stack := nbt.Compound{"id": id, "count": int32(1)}
+		if components != nil {
+			stack["components"] = components
+		}
+		entity := entity_render.Entity{ID: "minecraft:item_frame", NBT: nbt.Compound{"Facing": int8(2), "Item": stack}}
+		data, err := nbt.EncodeToNBTBytes(entity.NBT, nbt.OptEncodeToNBT{Encoding: nbt.EncodingBigEndian})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := nbt.DecodeFromNBTBytes(data, &entity.NBT, nbt.OptDecodeFromNBT{Encoding: nbt.EncodingBigEndian}); err != nil {
+			t.Fatal(err)
+		}
+		mesh, issues := renderer.Build(entity_render.Input{List: []entity_render.Entity{entity}})
+		if len(issues) != 0 || len(mesh.Quads) != 2 || mesh.Quads[1].Color != item.Quads[0].Color {
+			t.Fatalf("components %v: mesh=%v, issues=%v", components, mesh, issues)
+		}
+		var beforeValue nbt.Compound
+		if err := nbt.DecodeFromNBTBytes(data, &beforeValue, nbt.OptDecodeFromNBT{Encoding: nbt.EncodingBigEndian}); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(beforeValue, entity.NBT) {
+			t.Fatal("source NBT changed")
+		}
+	}
+	for _, components := range []any{int32(1), nbt.Compound{"minecraft:dyed_color": int32(123)}, nbt.Compound{"minecraft:item_model": int32(1)}} {
+		entity := entity_render.Entity{ID: "minecraft:item_frame", NBT: nbt.Compound{"Facing": int8(2), "Item": nbt.Compound{"id": "minecraft:diamond_sword", "components": components}}}
+		mesh, issues := renderer.Build(entity_render.Input{List: []entity_render.Entity{entity}})
+		if len(mesh.Quads) != 1 || len(issues) != 1 {
+			t.Fatalf("unsupported appearance must keep frame: %v, %v", mesh, issues)
+		}
+	}
+}
 
 func TestFrameFacingAndItemRotation(t *testing.T) {
 	// 固定物品坐标已由生成器居中；展示框只添加半尺寸、八向旋转和原版法线偏移。
