@@ -3,7 +3,7 @@ package tablegen
 import (
 	"fmt"
 
-	java "neomega-blocks/presets/java/v1"
+	java "neomega-viewer-core/viewer/javastates"
 	"neomega-viewer-core/viewer-assets/cmd/build-tables/internal/resources"
 	model "neomega-viewer-core/viewer/geometry/java_block_model"
 )
