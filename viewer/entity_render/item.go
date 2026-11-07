@@ -32,7 +32,8 @@ func frameItemModel(id string, value any) (string, error) {
 		case "custom_name", "item_name", "lore", "damage", "max_damage", "unbreakable",
 			"enchantments", "stored_enchantments", "enchantment_glint_override", "repair_cost",
 			"attribute_modifiers", "custom_data", "tooltip_display", "tooltip_style",
-			"hide_tooltip", "hide_additional_tooltip", "rarity", "max_stack_size":
+			"hide_tooltip", "hide_additional_tooltip", "rarity", "max_stack_size",
+			"writable_book_content", "written_book_content", "container", "lock", "container_loot":
 			// 这些组件不改变物品的固定模型与纹理。
 		default:
 			return "", fmt.Errorf("unsupported item component %s", name)
