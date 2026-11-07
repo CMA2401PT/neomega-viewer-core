@@ -13,6 +13,7 @@ import (
 	"neomega-viewer-core/viewer/geometry"
 	jmodel "neomega-viewer-core/viewer/geometry/java_block_model"
 	preset "neomega-viewer-core/viewer/resources"
+	"neomega-viewer-core/viewer/topview"
 )
 
 type shapeBucket struct {
@@ -46,7 +47,8 @@ func intern(tables *geometry.Tables[uint32], mesh geometry.Mesh, group uint32, b
 type Result struct {
 	*geometry.Tables[uint32]
 	preset.Metadata
-	Solid solidtable.Table
+	Solid  solidtable.Table
+	Colors topview.Table
 }
 
 func (engine *Builder) Build() (*Result, error) {
@@ -55,7 +57,8 @@ func (engine *Builder) Build() (*Result, error) {
 	slices.SortFunc(states, func(a, b ir.IRBlock) int { return cmp.Compare(a.Hash(), b.Hash()) })
 
 	tables := &Result{
-		Solid: make(solidtable.Table, len(states)),
+		Solid:  make(solidtable.Table, len(states)),
+		Colors: make(topview.Table, len(states)),
 		Tables: &geometry.Tables[uint32]{
 			Index:      make(map[uint32][]geometry.ModelID, len(states)),
 			FullHeight: map[geometry.ModelID]geometry.ModelID{},
@@ -76,6 +79,9 @@ func (engine *Builder) Build() (*Result, error) {
 		if err != nil {
 			tables.Skipped = append(tables.Skipped, preset.SkippedState{Block: block, Reason: err.Error()})
 			continue
+		}
+		if color, ok := averageTopColor(meshes, engine.Bundle.AtlasImage); ok {
+			tables.Colors[javaHash] = color
 		}
 		profile := engine.Bundle.Renderers.Blocks[jmodel.ResourceID(block.NameWithNameSpace())]
 		group := cullGroup(block, profile.Kind, profile.Family, groups)

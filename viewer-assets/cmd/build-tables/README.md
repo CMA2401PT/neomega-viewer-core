@@ -1,6 +1,6 @@
-# 生成配套几何、实心表与贴图
+# 生成配套几何、实心表、颜色表与贴图
 
-建表器从同一次 Java 资源构建的模型、图集和渲染说明生成方块几何、普通静态物品目录、元数据及六面实心表。
+建表器从同一次 Java 资源构建的模型、图集和渲染说明生成方块几何、普通静态物品目录、元数据、六面实心表及俯视图颜色表。
 几何与贴图由渲染器使用，实心表由 fixer 判断邻居边界覆盖。
 共同生成可以保证它们使用相同的状态集合、模型选择和材质规则。
 
@@ -36,7 +36,8 @@ go generate ./viewer/resources
 ```
 
 默认路径以生成器源码位置为准，无需手动复制输入。
-输出分别是 `viewer/resources/geometry.nvtables`、同名 `.java.json` 元数据和 `.items.json.gz` 物品目录、`fixer/solidtable/preset/geometry.nvsolid`，以及 `viewer/resources/textures` 下的贴图与来源声明。
+输出分别是 `viewer/resources/geometry.nvtables`、同名 `.java.json` 元数据和 `.items.json.gz` 物品目录、`fixer/solidtable/preset/geometry.nvsolid`、`viewer/topview/colors.nvcolor`，以及 `viewer/resources/textures` 下的贴图与来源声明。
+颜色表让俯视图按状态哈希取色，渲染时不再采样贴图。
 这些产物随源码提交，使普通构建不需要 Minecraft 安装。
 
 需要使用其他资源或输出位置时，在模块根目录执行：
@@ -46,10 +47,11 @@ go run ./viewer-assets/cmd/build-tables \
   -assets /path/to/dist/final \
   -output /path/to/geometry.nvtables \
   -solid /path/to/geometry.nvsolid \
+  -colors /path/to/colors.nvcolor \
   -textures /path/to/textures
 ```
 
-几何表与实心表的目标父目录需要预先存在。
+几何表、实心表与颜色表的目标父目录需要预先存在。
 资源生产流程与来源声明见 [viewer-assets](../../README.md)。
 
 ## 验证
@@ -62,4 +64,4 @@ NEOMEGA_ASSETS_DIR="$PWD/viewer-assets/dist/final" \
   go test -count=1 -v ./viewer-assets/cmd/build-tables/internal/tablegen
 ```
 
-这项检查重新建表，比较状态索引、四边形、覆盖、流体满高度映射、元数据、物品目录和实心表，并验证编码、磁盘加载与嵌入加载一致。
+这项检查重新建表，比较状态索引、四边形、覆盖、流体满高度映射、元数据、物品目录、实心表和颜色表，并验证编码、磁盘加载与嵌入加载一致。

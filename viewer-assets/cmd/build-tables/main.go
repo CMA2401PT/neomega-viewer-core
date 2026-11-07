@@ -21,9 +21,10 @@ func main() {
 	assets := flag.String("assets", filepath.Join(moduleRoot, "viewer-assets/dist/final"), "同一次资源构建的输出目录")
 	output := flag.String("output", filepath.Join(moduleRoot, "viewer/resources/geometry.nvtables"), "几何表输出路径")
 	solid := flag.String("solid", filepath.Join(moduleRoot, "fixer/solidtable/preset/geometry.nvsolid"), "实心表输出路径")
+	colors := flag.String("colors", filepath.Join(moduleRoot, "viewer/topview/colors.nvcolor"), "俯视图颜色表输出路径")
 	textures := flag.String("textures", filepath.Join(moduleRoot, "viewer/resources/textures"), "贴图与声明输出目录")
 	flag.Parse()
-	if err := generate(*assets, *output, *solid); err != nil {
+	if err := generate(*assets, *output, *solid, *colors); err != nil {
 		log.Fatal(err)
 	}
 	if err := copyTextures(*assets, *textures); err != nil {
@@ -31,8 +32,8 @@ func main() {
 	}
 }
 
-// generate 由匹配的模型和图集生成几何、元数据及实心表。
-func generate(assetsDir, output, solidPath string) error {
+func generate(assetsDir, output, solidPath, colorsPath string) error {
+	// 由匹配的模型和图集生成几何、元数据、实心表及颜色表，保证产物使用同一套材质。
 	builder, err := tablegen.Open(tablegen.OpenOptions{AssetsDir: assetsDir})
 	if err != nil {
 		return err
@@ -59,6 +60,17 @@ func generate(assetsDir, output, solidPath string) error {
 	}
 	tables, err := builder.Build()
 	if err != nil {
+		return err
+	}
+	colorFile, err := os.Create(colorsPath)
+	if err != nil {
+		return err
+	}
+	if err := tables.Colors.Encode(colorFile); err != nil {
+		colorFile.Close()
+		return err
+	}
+	if err := colorFile.Close(); err != nil {
 		return err
 	}
 	file, err := os.Create(output)
@@ -92,6 +104,7 @@ func generate(assetsDir, output, solidPath string) error {
 	}
 	fmt.Printf("%s: indexed=%d shapes=%d skipped=%d\n", output, len(tables.Index), len(tables.Shapes), len(tables.Skipped))
 	fmt.Printf("%s: entries=%d\n", solidPath, len(tables.Solid))
+	fmt.Printf("%s: colors=%d\n", colorsPath, len(tables.Colors))
 	return nil
 }
 
