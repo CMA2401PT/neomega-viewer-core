@@ -32,23 +32,40 @@ type staticItemModel struct {
 
 var errDynamicItem = errors.New("item requires dynamic rendering")
 
-func fixedItemReference(definition *staticItemModel) (model.ResourceID, error) {
+type itemReference struct {
+	ID    model.ResourceID
+	Tints []uint32
+}
+
+func fixedItemReference(definition *staticItemModel) (itemReference, error) {
 	if definition == nil {
-		return "", fmt.Errorf("%w: no fixed display fallback", errDynamicItem)
+		return itemReference{}, fmt.Errorf("%w: no fixed display fallback", errDynamicItem)
 	}
 	if len(definition.Transformation) != 0 {
-		return "", fmt.Errorf("%w: item transformation", errDynamicItem)
+		return itemReference{}, fmt.Errorf("%w: item transformation", errDynamicItem)
 	}
 	switch definition.Type {
 	case "minecraft:model":
-		if len(definition.Tints) > 0 {
-			return "", fmt.Errorf("%w: model tints", errDynamicItem)
+		var colors []uint32
+		for _, raw := range definition.Tints {
+			var tint struct {
+				Type  string `json:"type"`
+				Value *int64 `json:"value"`
+			}
+			if err := json.Unmarshal(raw, &tint); err != nil {
+				return itemReference{}, err
+			}
+			if tint.Type != "minecraft:constant" || tint.Value == nil {
+				return itemReference{}, fmt.Errorf("%w: model tint %s", errDynamicItem, tint.Type)
+			}
+			colors = append(colors, uint32(*tint.Value))
 		}
 		var reference string
 		if err := json.Unmarshal(definition.Model, &reference); err != nil {
-			return "", fmt.Errorf("model reference: %w", err)
+			return itemReference{}, fmt.Errorf("model reference: %w", err)
 		}
-		return model.ParseResourceID(reference)
+		id, err := model.ParseResourceID(reference)
+		return itemReference{ID: id, Tints: colors}, err
 	case "minecraft:condition":
 		// 展示框里的物品没有使用者、鱼钩或选中的收纳袋物品；默认鞘翅未损坏。
 		switch definition.Property {
@@ -63,7 +80,7 @@ func fixedItemReference(definition *staticItemModel) (model.ResourceID, error) {
 				if err := json.Unmarshal(choice.When, &values); err != nil {
 					var value string
 					if err := json.Unmarshal(choice.When, &value); err != nil {
-						return "", err
+						return itemReference{}, err
 					}
 					values = []string{value}
 				}
@@ -92,12 +109,12 @@ func fixedItemReference(definition *staticItemModel) (model.ResourceID, error) {
 			return fixedItemReference(selected)
 		}
 	}
-	return "", fmt.Errorf("%w: %s %s", errDynamicItem, definition.Type, definition.Property)
+	return itemReference{}, fmt.Errorf("%w: %s %s", errDynamicItem, definition.Type, definition.Property)
 }
 
 func staticItems(snapshot asset.Snapshot, input string, models model.Models, selected map[model.ResourceID]bool) (asset.ItemModels, error) {
 	// 读取普通物品的显式模型引用，并将物品与框体依赖的纹理加入 selected；复杂定义记录为不支持。
-	items := asset.ItemModels{Models: map[string]model.ResourceID{}, Unsupported: map[string]string{}}
+	items := asset.ItemModels{Tints: map[string][]uint32{}, Models: map[string]model.ResourceID{}, Unsupported: map[string]string{}}
 	resolver := model.NewResolver(models)
 	roots := []model.ResourceID{"minecraft:block/item_frame", "minecraft:block/glow_item_frame"}
 	for id, file := range snapshot.Items {
@@ -115,8 +132,11 @@ func staticItems(snapshot asset.Snapshot, input string, models model.Models, sel
 		if err != nil {
 			return items, fmt.Errorf("item %s: %w", id, err)
 		}
-		items.Models[string(id)] = target
-		roots = append(roots, target)
+		items.Models[string(id)] = target.ID
+		if len(target.Tints) > 0 {
+			items.Tints[string(id)] = target.Tints
+		}
+		roots = append(roots, target.ID)
 	}
 	for _, id := range roots {
 		resolved, err := resolver.Resolve(id)

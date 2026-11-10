@@ -20,7 +20,7 @@ func TestFrameItemComponents(t *testing.T) {
 		"minecraft:custom_name": nbt.Compound{"text": "展示用"},
 		"minecraft:lore":        []string{"说明"}, "minecraft:damage": int32(12),
 		"minecraft:enchantments": nbt.Compound{"minecraft:sharpness": int32(5)},
-	}, nbt.Compound{"minecraft:item_model": "diamond_sword"}} {
+	}, nbt.Compound{"minecraft:item_model": "diamond_sword"}, nbt.Compound{"minecraft:writable_book_content": nbt.Compound{"pages": []string{"test"}}}, nbt.Compound{"minecraft:container": []nbt.Compound{{"slot": int32(0)}}}} {
 		id := "minecraft:diamond_sword"
 		values, _ := components.(nbt.Compound)
 		if _, override := values["minecraft:item_model"]; override {

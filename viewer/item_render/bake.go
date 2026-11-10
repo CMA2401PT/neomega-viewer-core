@@ -15,11 +15,11 @@ import (
 var ErrUnsupportedModel = errors.New("unsupported static item model")
 
 // Bake 在资源生成时编译模型；elements 复用方块模型烘焙，generated 按 alpha 轮廓挤出。
-func Bake(resolved *model.Resolved, atlas model.Atlas, pixels image.Image) (geometry.Mesh, error) {
+func Bake(resolved *model.Resolved, atlas model.Atlas, pixels image.Image, tints ...uint32) (geometry.Mesh, error) {
 	if resolved.Builtin != "" && resolved.Builtin != "minecraft:builtin/generated" {
 		return geometry.Mesh{}, fmt.Errorf("%w: builtin %s", ErrUnsupportedModel, resolved.Builtin)
 	}
-	bound := atlasMaterials{atlas: atlas, pixels: pixels}
+	bound := atlasMaterials{atlas: atlas, pixels: pixels, tints: tints}
 	definition := *resolved
 	if resolved.Builtin == "minecraft:builtin/generated" {
 		elements, err := generated(resolved, atlas, pixels)
@@ -27,13 +27,6 @@ func Bake(resolved *model.Resolved, atlas model.Atlas, pixels image.Image) (geom
 			return geometry.Mesh{}, err
 		}
 		definition.Elements, definition.Builtin = elements, ""
-	}
-	for _, element := range definition.Elements {
-		for _, face := range element.Faces {
-			if face.TintIndex != nil {
-				return geometry.Mesh{}, fmt.Errorf("%w: model tint", ErrUnsupportedModel)
-			}
-		}
 	}
 	mesh, err := model.Bake(&definition, model.Apply{}, bound)
 	if err != nil {
@@ -93,6 +86,7 @@ func Bake(resolved *model.Resolved, atlas model.Atlas, pixels image.Image) (geom
 type atlasMaterials struct {
 	atlas  model.Atlas
 	pixels image.Image
+	tints  []uint32
 }
 
 func (m atlasMaterials) Surface(id model.ResourceID, forceBlend, unlit bool) (material.Surface, error) {
@@ -119,6 +113,9 @@ func (m atlasMaterials) Surface(id model.ResourceID, forceBlend, unlit bool) (ma
 	return material.Surface{Texture: string(id), Region: [4]float32{float32(entry.U), float32(entry.V), float32(entry.SU), float32(entry.SV)}, Mode: mode, Opacity: 1, Unlit: unlit, Frames: entry.Frames, FrameTime: entry.FrameTime}, nil
 }
 func (m atlasMaterials) Tint(index int) [3]float32 {
-	// 带 tint 的模型已在编译边界拒绝，普通物品保持原色。
+	// 缺少 tint 源的面保持原色；有常量 tint 时按客户端 RGB 逐面着色。
+	if index >= 0 && index < len(m.tints) {
+		return model.Linear(m.tints[index])
+	}
 	return [3]float32{1, 1, 1}
 }

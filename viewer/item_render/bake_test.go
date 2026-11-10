@@ -120,3 +120,47 @@ func TestBundledOrdinaryItems(t *testing.T) {
 		}
 	}
 }
+
+func TestConstantTintAndUntintedGeneratedLayers(t *testing.T) {
+	textures := map[string]model.TextureBinding{"layer0": {Sprite: "example:base"}, "layer1": {Sprite: "example:overlay"}}
+	resolved := &model.Resolved{Builtin: "minecraft:builtin/generated", Textures: textures}
+	atlas := model.Atlas{Width: 1, Height: 1, Textures: map[model.ResourceID]model.AtlasTexture{
+		"example:base": {SU: 1, SV: 1, Frames: 1}, "example:overlay": {SU: 1, SV: 1, Frames: 1},
+	}}
+	mesh, err := item_render.Bake(resolved, atlas, image.NewUniform(color.White), 0xff336699)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, q := range mesh.Quads {
+		seen[q.Surface.Texture]++
+		want := [3]float32{1, 1, 1}
+		if q.Surface.Texture == "example:base" {
+			// sRGB 0x336699 converted to linear light, matching the texture pipeline.
+			want = [3]float32{0.033104766, 0.13286832, 0.31854677}
+		}
+		if q.Color != want {
+			t.Fatalf("layer tint: %s %v want %v", q.Surface.Texture, q.Color, want)
+		}
+	}
+	if seen["example:base"] < 6 || seen["example:overlay"] < 6 {
+		t.Fatalf("missing generated faces: %v", seen)
+	}
+}
+
+func TestBundledLeafAndUntintedBlockItems(t *testing.T) {
+	assets, err := preset.Open(preset.OpenOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	renderer := item_render.New(assets.Items)
+	for _, id := range []string{"minecraft:oak_leaves", "minecraft:orange_poplar_leaves", "minecraft:cherry_leaves", "minecraft:pale_oak_leaves", "minecraft:stonecutter"} {
+		mesh, err := renderer.Render(id)
+		if err != nil || len(mesh.Quads) == 0 {
+			t.Fatalf("%s: %v", id, err)
+		}
+		if id == "minecraft:oak_leaves" && mesh.Quads[0].Color == ([3]float32{1, 1, 1}) {
+			t.Fatal("oak leaves lost constant tint")
+		}
+	}
+}
