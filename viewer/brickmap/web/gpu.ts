@@ -133,9 +133,10 @@ export class BrickmapPool {
 }
 
 export function directoryLevels(size: Vec3): Level[] {
-  // 未到达的区域使用独立哨兵，空气编号 0 只表示已知为空。
+  // 目录补齐到二次幂，保证每级都能完整合并；窗口的实际射线范围仍由 size 限定。
+  // 补齐与未到达区域使用 UNKNOWN，空气编号 0 只表示已知为空。
   const levels: Level[] = [];
-  let dimensions = size.map(n => n / 8) as Vec3;
+  let dimensions = size.map(n => 2 ** Math.ceil(Math.log2(n / 8))) as Vec3;
   for (;;) {
     levels.push({ size: dimensions, cells: new Uint32Array(dimensions[0] * dimensions[1] * dimensions[2]).fill(UNKNOWN) });
     if (dimensions.every(n => n === 1)) return levels;
