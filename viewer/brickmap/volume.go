@@ -1,5 +1,5 @@
-// Package full_view 用分层颜色体素支持可旋转的正交视图；不读取存档，也不生成场景网格。
-package full_view
+// Package brickmap 用稀疏 8³ 小块和多级目录组织材质体素，支持 WebGL 2 正交射线渲染。
+package brickmap
 
 import (
 	"encoding/binary"
@@ -68,6 +68,32 @@ func (b *Builder) AddBrick(origin [3]int, brick Brick) {
 	d := v.Levels[0].Size
 	x, y, z := (origin[0]-v.Origin[0])/8, (origin[1]-v.Origin[1])/8, (origin[2]-v.Origin[2])/8
 	v.Levels[0].Cells[x+d[0]*(y+d[1]*z)] = value
+}
+
+func (b *Builder) AddSection(origin [3]int, cells []uint16) {
+	// 接收按 x<<8|z<<4|y 排列的 16³ 材质格，转换为目录使用的八个小块。
+	// 输入可以在返回后复用；均匀小块由 AddBrick 合并，不占砖池。
+	var brick [BrickCells]uint16
+	for bz := range 2 {
+		for by := range 2 {
+			for bx := range 2 {
+				nonempty := false
+				for z := range BrickSide {
+					for y := range BrickSide {
+						for x := range BrickSide {
+							value := cells[((bx*8+x)<<8)|((bz*8+z)<<4)|(by*8+y)]
+							brick[x+8*(y+8*z)] = value
+							nonempty = nonempty || value != 0
+						}
+					}
+				}
+				if !nonempty {
+					continue
+				}
+				b.AddBrick([3]int{origin[0] + bx*8, origin[1] + by*8, origin[2] + bz*8}, Brick{Cells: brick[:]})
+			}
+		}
+	}
 }
 
 // Build 适用于按坐标生成数据的来源；已有存档可用 Builder 按读入顺序提交小块。
@@ -144,7 +170,7 @@ func (v *Volume) Write(w io.Writer) error {
 		Levels        [][3]int `json:"levels"`
 		BrickBytes    int      `json:"brickBytes"`
 		MaterialCount int      `json:"materialCount"`
-	}{"full-view-2", v.Origin, v.Size, sizes, len(v.Bricks) * 2, len(v.Palette)})
+	}{"brickmap-2", v.Origin, v.Size, sizes, len(v.Bricks) * 2, len(v.Palette)})
 	if err != nil {
 		return err
 	}

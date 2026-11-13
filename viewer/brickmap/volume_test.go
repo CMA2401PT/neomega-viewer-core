@@ -1,4 +1,4 @@
-package full_view
+package brickmap
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func TestVolumeRoundTripAndHierarchy(t *testing.T) {
 	if err := json.Unmarshal(data[4:4+headerBytes], &header); err != nil {
 		t.Fatal(err)
 	}
-	if header.Format != "full-view-2" || header.BrickBytes != len(v.Bricks)*2 || headerBytes%4 != 0 {
+	if header.Format != "brickmap-2" || header.BrickBytes != len(v.Bricks)*2 || headerBytes%4 != 0 {
 		t.Fatal("元数据错误")
 	}
 	offset := 4 + headerBytes + 256*28
@@ -97,5 +97,29 @@ func TestUniformCellsAreCollapsed(t *testing.T) {
 	v := Build([3]int{}, [3]int{8, 8, 8}, make([]Material, 256), func([3]int) Brick { return Brick{Cells: cells} })
 	if len(v.Bricks)*2 != 0 || v.At([3]int{7, 7, 7}) != 8 {
 		t.Fatal("展开的同色输入未合并")
+	}
+}
+
+func TestAddSectionAxisOrder(t *testing.T) {
+	builder := NewBuilder([3]int{-16, -16, -16}, [3]int{16, 16, 16}, nil)
+	cells := make([]uint16, 4096)
+	for x := range 16 {
+		for z := range 16 {
+			for y := range 16 {
+				cells[x<<8|z<<4|y] = uint16(1 + x*256 + z*16 + y)
+			}
+		}
+	}
+	builder.AddSection([3]int{-16, -16, -16}, cells)
+	volume := builder.Finish()
+	clear(cells)
+	for x := range 16 {
+		for z := range 16 {
+			for y := range 16 {
+				if got, want := volume.At([3]int{x - 16, y - 16, z - 16}), uint16(1+x*256+z*16+y); got != want {
+					t.Fatalf("%d,%d,%d: %d != %d", x, y, z, got, want)
+				}
+			}
+		}
 	}
 }

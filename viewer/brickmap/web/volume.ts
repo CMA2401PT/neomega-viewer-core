@@ -14,7 +14,7 @@ export function decodeVolume(buffer: ArrayBuffer): Volume {
   const header = JSON.parse(new TextDecoder().decode(new Uint8Array(buffer, 4, headerBytes))) as {
     format: string; origin: Vec3; size: Vec3; levels: Vec3[]; brickBytes: number; materialCount: number;
   };
-  if (header.format !== "full-view-2") throw new Error(`不支持的体素格式：${header.format}`);
+  if (header.format !== "brickmap-2") throw new Error(`不支持的体素格式：${header.format}`);
   let offset = 4 + headerBytes;
   const palette = new Uint8Array(buffer, offset, header.materialCount * 24);
   offset += header.materialCount * 24;
