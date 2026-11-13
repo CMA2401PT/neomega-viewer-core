@@ -77,22 +77,24 @@ bool crossBoundary(uint current,float t) {
   if(current!=0u && visitSurface(current,outgoing^1,t,voxelCell))return true;
   return false;
 }
-void traceRay() {
+void main() {
+  // 部分 D3D11 后端会错误处理嵌套循环函数的提前返回；遍历直接在入口结束片元。
+  cameraRay();
   vec3 bounds=vec3(uSize.x,min(uSize.y,uClipY),uSize.z);
-  if(bounds.y<=0.0)return;
+  if(bounds.y<=0.0){outputPixel();return;}
   inverseDirection=1.0/mix(vec3(1e-30),rayDirection,greaterThan(abs(rayDirection),vec3(1e-8)));
   vec3 enter=-rayOrigin*inverseDirection;
   vec3 leave=(bounds-rayOrigin)*inverseDirection;
   vec3 nearAxis=min(enter,leave),farAxis=max(enter,leave);
   for(int a=0;a<3;a++) if(abs(rayDirection[a])<1e-8) {
-    if(rayOrigin[a]<0.0 || rayOrigin[a]>=bounds[a])return;
+    if(rayOrigin[a]<0.0 || rayOrigin[a]>=bounds[a]){outputPixel();return;}
     nearAxis[a]=-1e30;farAxis[a]=1e30;
   }
   face=nearAxis.x>=nearAxis.y && nearAxis.x>=nearAxis.z ? 0 : nearAxis.y>=nearAxis.z ? 1 : 2;
   float t=max(0.0,nearAxis[face]);
   int exitFace=farAxis.x<=farAxis.y && farAxis.x<=farAxis.z ? 0 : farAxis.y<=farAxis.z ? 1 : 2;
   float end=farAxis[exitFace];
-  if(t>=end)return;
+  if(t>=end){outputPixel();return;}
   // 水平窗口边界是数据裁切，Y 切片则有意显示切开的实心表面。
   suppressEntry=t==0.0 || (uOpenBoundary && face!=1);
   voxelCell=clamp(ivec3(floor(rayOrigin+rayDirection*t)),ivec3(0),ivec3(bounds)-1);
@@ -106,29 +108,31 @@ void traceRay() {
         missingCell=ivec3(floor(rayOrigin+rayDirection*end));
         missingCell[exitFace]=rayDirection[exitFace]>0.0 ? int(bounds[exitFace]) : -1;
       } else crossBoundary(0u,end);
+      outputPixel();
       return;
     }
     visits++;
     float side=8.0*exp2(float(level));
     ivec3 cell=clamp(voxelCell>>(3+level),ivec3(0),textureSize(uDirectory,level)-1);
     uint value=texelFetch(uDirectory,cell,level).r;
-    if(value==0xfffffffeu) {result=2;missingCell=voxelCell;return;}
+    if(value==0xfffffffeu) {result=2;missingCell=voxelCell;outputPixel();return;}
     if(level>0 && value==0xffffffffu) {level--;continue;}
     if(value>=65536u) {
       for(int step=0;step<25;step++) {
         ivec3 voxel=voxelCell;
         if(t>=end || any(notEqual(voxel>>3,cell)))break;
         visits++;
-        if(crossBoundary(brickColor(value,voxel&7),t))return;
+        if(crossBoundary(brickColor(value,voxel&7),t)){outputPixel();return;}
         t=leaveCell(vec3(voxel),1.0);
       }
     } else {
-      if(crossBoundary(value,t))return;
+      if(crossBoundary(value,t)){outputPixel();return;}
       t=leaveCell(vec3(cell)*side,side);
     }
     level=min(uTop,level+1);
   }
   result=3;
+  outputPixel();
 }
 `;
 
@@ -174,6 +178,6 @@ void outputPixel() {
 
 export function makeFragmentShader(picking = false): string {
   // 替换射线生成与输出即可接入其他相机或合成方式，层级遍历保持共用。
-  return `#version 300 es\n${declarations}\n${orthographicRayShader}\n${picking ? pickOutputShader : colorOutputShader}\n${traversalShader}\nvoid main(){cameraRay();traceRay();outputPixel();}`;
+  return `#version 300 es\n${declarations}\n${orthographicRayShader}\n${picking ? pickOutputShader : colorOutputShader}\n${traversalShader}`;
 }
 export const fragmentShader = makeFragmentShader();
