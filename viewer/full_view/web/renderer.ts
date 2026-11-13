@@ -40,13 +40,14 @@ export class FullViewRenderer {
     this.program = program;
     this.vao = gl.createVertexArray()!;
     gl.useProgram(program);
-    for (const name of ["uDirectory", "uBricks", "uPalette", "uSize", "uOrigin", "uRight", "uUp", "uDirection", "uResolution", "uSpan", "uFar", "uTop", "uDebug"]) {
+    for (const name of ["uDirectory", "uBricks", "uPalette", "uGroups", "uSize", "uOrigin", "uRight", "uUp", "uDirection", "uResolution", "uSpan", "uFar", "uTop", "uDebug"]) {
       this.uniforms.set(name, gl.getUniformLocation(program, name)!);
     }
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
     const max3D = gl.getParameter(gl.MAX_3D_TEXTURE_SIZE) as number;
     if (volume.levels[0].size.some(n => n > max3D)) throw new Error(`目录超过设备的三维纹理边长 ${max3D}`);
-    let bytes = 1024;
+    const materialRows = Math.ceil(volume.groups.length / 256);
+    let bytes = materialRows * 256 * 28;
     const directory = gl.createTexture()!;
     this.textures.push(directory);
     gl.activeTexture(gl.TEXTURE0);
@@ -60,21 +61,21 @@ export class FullViewRenderer {
     gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.uniform1i(this.uniforms.get("uDirectory")!, 0);
 
-    // 砖池按 4 MiB 分页，避免单张二维纹理的边长限制；尾页补齐也计入预算。
-    const pageBytes = 2048 * 2048;
-    const pages = Math.max(1, Math.ceil(volume.bricks.length / pageBytes));
-    bytes += pages * pageBytes;
+    // 砖池按 8 MiB 分页，避免单张二维纹理的边长限制；尾页补齐也计入预算。
+    const pageCells = 2048 * 2048;
+    const pages = Math.max(1, Math.ceil(volume.bricks.length / pageCells));
+    bytes += pages * pageCells * 2;
     if (pages > gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) || bytes >= 2 ** 31) throw new Error("体素数据超过设备纹理层数或 2 GiB 数据预算");
     const bricks = gl.createTexture()!;
     this.textures.push(bricks);
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, bricks);
-    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R8UI, 2048, 2048, pages);
+    gl.texStorage3D(gl.TEXTURE_2D_ARRAY, 1, gl.R16UI, 2048, 2048, pages);
     for (let page = 0; page < pages; page++) {
-      const data = volume.bricks.subarray(page * pageBytes, (page + 1) * pageBytes);
+      const data = volume.bricks.subarray(page * pageCells, (page + 1) * pageCells);
       const fullRows = Math.floor(data.length / 2048);
-      if (fullRows) gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, page, 2048, fullRows, 1, gl.RED_INTEGER, gl.UNSIGNED_BYTE, data.subarray(0, fullRows * 2048));
-      if (data.length % 2048) gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, fullRows, page, data.length % 2048, 1, 1, gl.RED_INTEGER, gl.UNSIGNED_BYTE, data.subarray(fullRows * 2048));
+      if (fullRows) gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, page, 2048, fullRows, 1, gl.RED_INTEGER, gl.UNSIGNED_SHORT, data.subarray(0, fullRows * 2048));
+      if (data.length % 2048) gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, fullRows, page, data.length % 2048, 1, 1, gl.RED_INTEGER, gl.UNSIGNED_SHORT, data.subarray(fullRows * 2048));
     }
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
@@ -84,11 +85,24 @@ export class FullViewRenderer {
     this.textures.push(palette);
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, palette);
-    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 256, 1);
-    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, 1, gl.RGBA, gl.UNSIGNED_BYTE, volume.palette);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, 1536, materialRows);
+    const faces = new Uint8Array(materialRows * 256 * 24);
+    faces.set(volume.palette);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1536, materialRows, gl.RGBA, gl.UNSIGNED_BYTE, faces);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.uniform1i(this.uniforms.get("uPalette")!, 2);
+    const groups = gl.createTexture()!;
+    this.textures.push(groups);
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, groups);
+    gl.texStorage2D(gl.TEXTURE_2D, 1, gl.R32UI, 256, materialRows);
+    const groupIDs = new Uint32Array(materialRows * 256);
+    groupIDs.set(volume.groups);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 256, materialRows, gl.RED_INTEGER, gl.UNSIGNED_INT, groupIDs);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.uniform1i(this.uniforms.get("uGroups")!, 3);
     this.textureBytes = bytes;
     const error = gl.getError();
     if (error !== gl.NO_ERROR) throw new Error(`上传体素纹理失败，WebGL 错误 ${error}`);

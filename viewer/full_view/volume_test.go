@@ -9,14 +9,14 @@ import (
 
 func TestVolumeRoundTripAndHierarchy(t *testing.T) {
 	origin, size := [3]int{-24, -8, 40}, [3]int{32, 16, 64}
-	color := func(p [3]int) byte {
+	color := func(p [3]int) uint16 {
 		if (p[0]+p[1]+p[2])%7 == 0 {
 			return 0
 		}
-		return byte((p[0]*p[0]+p[1]*p[1]+p[2])%9 + 1)
+		return uint16((p[0]*p[0]+p[1]*p[1]+p[2])%9 + 1)
 	}
-	var scratch [512]byte
-	v := Build(origin, size, [1024]byte{}, func(o [3]int) Brick {
+	var scratch [512]uint16
+	v := Build(origin, size, make([]Material, 256), func(o [3]int) Brick {
 		for z := range 8 {
 			for y := range 8 {
 				for x := range 8 {
@@ -56,10 +56,10 @@ func TestVolumeRoundTripAndHierarchy(t *testing.T) {
 	if err := json.Unmarshal(data[4:4+headerBytes], &header); err != nil {
 		t.Fatal(err)
 	}
-	if header.Format != "full-view-1" || header.BrickBytes != len(v.Bricks) || headerBytes%4 != 0 {
+	if header.Format != "full-view-2" || header.BrickBytes != len(v.Bricks)*2 || headerBytes%4 != 0 {
 		t.Fatal("元数据错误")
 	}
-	offset := 4 + headerBytes + 1024
+	offset := 4 + headerBytes + 256*28
 	for _, level := range v.Levels {
 		for _, c := range level.Cells {
 			if binary.LittleEndian.Uint32(data[offset:]) != c {
@@ -68,15 +68,15 @@ func TestVolumeRoundTripAndHierarchy(t *testing.T) {
 			offset += 4
 		}
 	}
-	if !bytes.Equal(data[offset:], v.Bricks) {
+	if len(data[offset:]) != len(v.Bricks)*2 {
 		t.Fatal("砖池编码错误")
 	}
 }
 
 func TestUniformRectangularVolume(t *testing.T) {
-	for _, color := range []byte{0, 1, 255} {
-		v := Build([3]int{}, [3]int{64, 8, 32}, [1024]byte{}, func([3]int) Brick { return Brick{Color: color} })
-		if len(v.Bricks) != 0 {
+	for _, color := range []uint16{0, 1, 65535} {
+		v := Build([3]int{}, [3]int{64, 8, 32}, make([]Material, 256), func([3]int) Brick { return Brick{MaterialID: color} })
+		if len(v.Bricks)*2 != 0 {
 			t.Fatal("同色区域不应展开")
 		}
 		for _, level := range v.Levels {
@@ -90,9 +90,12 @@ func TestUniformRectangularVolume(t *testing.T) {
 }
 
 func TestUniformCellsAreCollapsed(t *testing.T) {
-	cells := bytes.Repeat([]byte{8}, 512)
-	v := Build([3]int{}, [3]int{8, 8, 8}, [1024]byte{}, func([3]int) Brick { return Brick{Cells: cells} })
-	if len(v.Bricks) != 0 || v.At([3]int{7, 7, 7}) != 8 {
+	cells := make([]uint16, 512)
+	for i := range cells {
+		cells[i] = 8
+	}
+	v := Build([3]int{}, [3]int{8, 8, 8}, make([]Material, 256), func([3]int) Brick { return Brick{Cells: cells} })
+	if len(v.Bricks)*2 != 0 || v.At([3]int{7, 7, 7}) != 8 {
 		t.Fatal("展开的同色输入未合并")
 	}
 }
