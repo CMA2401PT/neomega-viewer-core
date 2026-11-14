@@ -296,7 +296,7 @@ scene.add(transparent.object, effects.object);
 
 这些入口返回统一的 `RenderObject`，可以像整帧对象一样更新时间和释放资源。批次对象从实际几何计算边界，特效对象的边界覆盖整个动画范围。宿主每帧向各对象传入同一个秒数。`animated` 可用于决定是否继续请求动画帧。
 
-需要同时显示一批 section 时，逐个创建整帧对象会增加绘制提交。`SectionScene` 按空间区域合批，并统一管理共享材质、两级可见性和遮挡查询。使用公共图集的 actor 参与合批，私有贴图 actor 保持独立材质并随区域卸载。每个实例使用固定边长，构造函数第五个参数 `sectionSize` 默认为 16；使用其他 N 时由宿主在创建时指定。共享坐标类型 `SectionPos` 使用 section 坐标。帧内几何使用该 section 的局部坐标。
+需要同时显示一批 section 时，逐个创建整帧对象会增加绘制提交。`SectionScene` 按空间区域合批，并统一管理共享材质和两级视锥裁剪。使用公共图集的 actor 参与合批，私有贴图 actor 保持独立材质并随区域卸载。每个实例使用固定边长，构造函数第四个参数 `sectionSize` 默认为 16；使用其他 N 时由宿主在创建时指定。共享坐标类型 `SectionPos` 使用 section 坐标。帧内几何使用该 section 的局部坐标。
 
 宿主先准备一组位置与 `FrameData`。下面的 `sections` 是宿主提供的位置与快照列表，可以一次挂载 Java 结构文件中的所有 section，也可以随着加载结果逐个加入：
 
@@ -307,7 +307,6 @@ const sectionScene = new SectionScene(
   scene,
   atlas,
   registry,
-  renderer,
 );
 for (const { pos, frame } of sections) {
   const section = sectionScene.prepare(pos, frame);
@@ -316,13 +315,13 @@ for (const { pos, frame } of sections) {
 
 function renderSections(timestamp: number): void {
   sectionScene.update(camera, timestamp / 1000);
-  sectionScene.render(renderer, camera);
+  renderer.render(scene, camera);
 }
 ```
 
-传入 `renderer` 后，场景可以用 GPU 遮挡查询减少绘制。`render` 统一安排不透明表面、查询和其余表面的绘制顺序。移除单个 section 时调用其 `dispose()`。关闭整组场景时调用 `sectionScene.dispose()` 释放已挂载对象和共享材质。数据读取、加载调度和缺失模型计数由宿主管理。
+宿主用 three.js 的 `renderer.render(scene, camera)` 绘制场景。移除单个 section 时调用其 `dispose()`。关闭整组场景时调用 `sectionScene.dispose()` 释放已挂载对象和共享材质。数据读取、加载调度和缺失模型计数由宿主管理。
 
-有时宿主想让整片场景换一种画法，例如线描或扫描光效，同时保留合批、贴图动画和遮挡流程。第六个参数 `style` 为此提供着色扩展：它是一段 GLSL 和配套 uniform，所有共享材质在常规着色之后调用其中的 `styleSurface(color, alpha, worldPosition, faceUV, faceColor)`，可以改写颜色与透明度。uniform 不复制，宿主每帧改写同一份值即可驱动动画。不传时着色器与原先完全相同。
+有时宿主想让整片场景换一种画法，例如线描或扫描光效，同时保留合批和贴图动画。第五个参数 `style` 为此提供着色扩展：它是一段 GLSL 和配套 uniform，所有共享材质在常规着色之后调用其中的 `styleSurface(color, alpha, worldPosition, faceUV, faceColor)`，可以改写颜色与透明度。uniform 不复制，宿主每帧改写同一份值即可驱动动画。不传时着色器与原先完全相同。
 
 ## 接口与扩展位置
 

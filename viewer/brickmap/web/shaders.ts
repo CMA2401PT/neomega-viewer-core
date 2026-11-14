@@ -11,7 +11,21 @@ void cameraRay() {
     *vec2(uViewport.z/uViewport.w,1.0)*uSpan;
   rayOrigin=uOrigin+uRight*pixel.x+uUp*pixel.y;
   rayDirection=uDirection;
-}`;
+}
+float rayStart() {return 0.0;}
+float rayEnd() {return 1e30;}
+`;
+
+export const perspectiveRayShader = `
+void cameraRay() {
+  vec2 pixel=((gl_FragCoord.xy-uViewport.xy)/uViewport.zw-0.5)
+    *vec2(uViewport.z/uViewport.w,1.0)*uSpan;
+  rayOrigin=uOrigin;
+  rayDirection=normalize(uDirection+uRight*pixel.x+uUp*pixel.y);
+}
+float rayStart() {return uNear/dot(rayDirection,uDirection);}
+float rayEnd() {return uFar/dot(rayDirection,uDirection);}
+`;
 
 const declarations = `
 precision highp float;
@@ -26,7 +40,13 @@ uniform sampler2D uPalette;
 uniform usampler2D uGroups;
 uniform vec3 uSize, uOrigin, uRight, uUp, uDirection, uBackground;
 uniform vec4 uViewport;
-uniform float uSpan, uFar, uClipY;
+uniform float uSpan, uFar, uNear, uClipY;
+#ifdef FAR_VIEW
+uniform usampler3D uCoverage;
+uniform bool uUseCoverage;
+uniform vec3 uCoverageMin, uCoverageMax;
+uniform vec2 uFog;
+#endif
 uniform int uTop, uDebug;
 uniform bool uOpenBoundary;
 vec3 rayOrigin, rayDirection, inverseDirection;
@@ -91,12 +111,12 @@ void main() {
     nearAxis[a]=-1e30;farAxis[a]=1e30;
   }
   face=nearAxis.x>=nearAxis.y && nearAxis.x>=nearAxis.z ? 0 : nearAxis.y>=nearAxis.z ? 1 : 2;
-  float t=max(0.0,nearAxis[face]);
+  float t=max(rayStart(),nearAxis[face]);
   int exitFace=farAxis.x<=farAxis.y && farAxis.x<=farAxis.z ? 0 : farAxis.y<=farAxis.z ? 1 : 2;
-  float end=farAxis[exitFace];
+  float end=min(rayEnd(),farAxis[exitFace]);
   if(t>=end){outputPixel();return;}
   // 水平窗口边界是数据裁切，Y 切片则有意显示切开的实心表面。
-  suppressEntry=t==0.0 || (uOpenBoundary && face!=1);
+  suppressEntry=nearAxis[face]<=rayStart() || (uOpenBoundary && face!=1);
   voxelCell=clamp(ivec3(floor(rayOrigin+rayDirection*t)),ivec3(0),ivec3(bounds)-1);
   int level=uTop;
   for(int iteration=0;iteration<16384;iteration++) {
@@ -111,9 +131,23 @@ void main() {
       outputPixel();
       return;
     }
+#ifdef FAR_VIEW
+    if(uUseCoverage && texelFetch(uCoverage,voxelCell>>4,0).r!=0u) {
+      t=leaveCell(vec3(voxelCell>>4)*16.0,16.0);
+      previous=0u;
+      suppressEntry=true;
+      level=uTop;
+      continue;
+    }
+#endif
     visits++;
     float side=8.0*exp2(float(level));
     ivec3 cell=clamp(voxelCell>>(3+level),ivec3(0),textureSize(uDirectory,level)-1);
+#ifdef FAR_VIEW
+    vec3 lower=vec3(cell)*side;
+    if(uUseCoverage && level>1 && all(lessThan(lower,uCoverageMax))
+      && all(greaterThan(lower+side,uCoverageMin))) {level--;continue;}
+#endif
     uint value=texelFetch(uDirectory,cell,level).r;
     if(value==0xfffffffeu) {result=2;missingCell=voxelCell;outputPixel();return;}
     if(level>0 && value==0xffffffffu) {level--;continue;}
@@ -156,12 +190,22 @@ void outputPixel() {
   }
   if(uDebug==2) {float heat=float(visits)/160.0;outColor=vec4(heat,heat*heat,0.2,1);return;}
   vec3 background=uBackground;
+  #ifndef FAR_VIEW
   if(result==2) {
     float stripe=mod(floor((gl_FragCoord.x+gl_FragCoord.y)/8.0),2.0);
     background=mix(vec3(0.15,0.14,0.12),vec3(0.24,0.21,0.16),stripe);
   }
-  outColor=vec4(toSRGB(accumulated+transmission*toLinear(background)),1);
+  #endif
+  vec3 color=accumulated+transmission*toLinear(background);
+#ifdef FAR_VIEW
+  float viewDepth=firstDepth*dot(rayDirection,uDirection);
+  float fog=touched ? smoothstep(uFog.x,uFog.y,viewDepth) : 1.0;
+  outColor=vec4(toSRGB(mix(color,toLinear(background),fog)),1);
+  gl_FragDepth=touched ? uFar/(uFar-uNear)-(uFar*uNear)/((uFar-uNear)*viewDepth) : 1.0;
+#else
+  outColor=vec4(toSRGB(color),1);
   gl_FragDepth=touched ? firstDepth/uFar : 1.0;
+#endif
 }
 `;
 
@@ -176,8 +220,8 @@ void outputPixel() {
 }
 `;
 
-export function makeFragmentShader(picking = false): string {
+export function makeFragmentShader(picking = false, perspective = false): string {
   // 替换射线生成与输出即可接入其他相机或合成方式，层级遍历保持共用。
-  return `#version 300 es\n${declarations}\n${orthographicRayShader}\n${picking ? pickOutputShader : colorOutputShader}\n${traversalShader}`;
+  return `#version 300 es\n${perspective ? "#define FAR_VIEW" : ""}\n${declarations}\n${perspective ? perspectiveRayShader : orthographicRayShader}\n${picking ? pickOutputShader : colorOutputShader}\n${traversalShader}`;
 }
 export const fragmentShader = makeFragmentShader();

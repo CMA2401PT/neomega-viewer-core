@@ -33,7 +33,6 @@ async function main(): Promise<void> {
     scene,
     atlas,
     createEffectRegistry(book),
-    renderer,
     SECTION_SIZE,
   );
   const loader = new SectionLoader(world);
@@ -53,7 +52,7 @@ async function main(): Promise<void> {
     previousTime = time;
     loader.update(camera.position);
     world.update(camera, time / 1000);
-    world.render(renderer, camera);
+    renderer.render(scene, camera);
     if (time - lastHUD >= 100) {
       axes.update(camera.quaternion);
       position.textContent = loader.error || [

@@ -170,7 +170,7 @@ test("regional buffers shrink after unloading and reuse slots without disturbing
 test("固定边长决定批次、静态网格和特效的摆放，不读取快照尺寸", () => {
   for (const side of [1, 3, 16]) {
     const scene = new THREE.Scene(), texture = atlas();
-    const world = new SectionScene(scene, texture, new Map(), undefined, side);
+    const world = new SectionScene(scene, texture, new Map(), side);
     const data = fixture();
     const origin = world.prepare({ x: 0, y: 0, z: 0 }, data);
     const placed = world.prepare({ x: -2, y: 1, z: 4 }, data);

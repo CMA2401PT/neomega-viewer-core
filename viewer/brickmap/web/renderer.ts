@@ -1,5 +1,6 @@
 import { cameraBasis, type Camera, type Vec3 } from "./volume.ts";
 import { BrickmapPool, BrickmapWindow } from "./gpu.ts";
+import type { BrickmapCoverage } from "./coverage.ts";
 import { makeFragmentShader, vertexShader } from "./shaders.ts";
 
 interface TimerExtension { TIME_ELAPSED_EXT: number; GPU_DISJOINT_EXT: number }
@@ -8,6 +9,19 @@ export type PickResult =
   | { kind: "hit"; position: Vec3; face: number }
   | { kind: "missing"; position: Vec3 }
   | { kind: "miss" };
+export interface PerspectiveCamera {
+  position: Vec3;
+  right: Vec3;
+  up: Vec3;
+  direction: Vec3;
+  verticalFov: number;
+  near: number;
+  far: number;
+}
+export interface PerspectiveDrawOptions extends DrawOptions {
+  coverage?: BrickmapCoverage;
+  fog: [number, number];
+}
 export interface DrawOptions {
   viewport?: [number, number, number, number];
   framebuffer?: WebGLFramebuffer | null;
@@ -38,6 +52,7 @@ export class BrickmapRenderer {
   readonly window: BrickmapWindow;
   private readonly color: Program;
   private readonly picking: Program;
+  private perspective?: Program;
   private readonly vao: WebGLVertexArrayObject;
   private readonly pickTarget: WebGLFramebuffer;
   private readonly pickTexture: WebGLTexture;
@@ -68,11 +83,11 @@ export class BrickmapRenderer {
     return this.pool.textureBytes + this.window.levels.reduce((sum, level) => sum + level.cells.byteLength, 0);
   }
 
-  private compile(picking: boolean): Program {
+  private compile(picking: boolean, perspective = false): Program {
     // 两种输出共享遍历源码，拾取不会维护另一套边界或透明介质规则。
     const gl = this.gl;
     const handle = gl.createProgram()!;
-    for (const [type, source] of [[gl.VERTEX_SHADER, vertexShader], [gl.FRAGMENT_SHADER, makeFragmentShader(picking)]] as const) {
+    for (const [type, source] of [[gl.VERTEX_SHADER, vertexShader], [gl.FRAGMENT_SHADER, makeFragmentShader(picking, perspective)]] as const) {
       const shader = gl.createShader(type)!;
       gl.shaderSource(shader, source);
       gl.compileShader(shader);
@@ -83,7 +98,7 @@ export class BrickmapRenderer {
     gl.linkProgram(handle);
     if (!gl.getProgramParameter(handle, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(handle)!);
     const uniforms = new Map<string, WebGLUniformLocation | null>();
-    for (const name of ["uDirectory", "uBricks", "uPalette", "uGroups", "uSize", "uOrigin", "uRight", "uUp", "uDirection", "uViewport", "uSpan", "uFar", "uTop", "uDebug", "uClipY", "uOpenBoundary", "uBackground"]) {
+    for (const name of ["uDirectory", "uBricks", "uPalette", "uGroups", "uSize", "uOrigin", "uRight", "uUp", "uDirection", "uViewport", "uSpan", "uFar", "uTop", "uDebug", "uClipY", "uOpenBoundary", "uBackground", "uNear", "uCoverage", "uUseCoverage", "uCoverageMin", "uCoverageMax", "uFog"]) {
       uniforms.set(name, gl.getUniformLocation(handle, name));
     }
     return { handle, uniforms };
@@ -159,6 +174,34 @@ export class BrickmapRenderer {
     if (query) { gl.endQuery(timer!.TIME_ELAPSED_EXT); this.queries.push(query); }
   }
 
+  drawPerspective(camera: PerspectiveCamera, options: PerspectiveDrawOptions): void {
+    // 先写入与主相机一致的透视深度，宿主保留颜色与深度再绘制精细网格。
+    const gl = this.gl;
+    const program = this.perspective ??= this.compile(false, true);
+    this.bind(program, options);
+    gl.enable(gl.DEPTH_TEST);
+    gl.depthFunc(gl.ALWAYS);
+    gl.depthMask(true);
+    const u = program.uniforms;
+    gl.uniform3fv(u.get("uOrigin")!, camera.position.map((n, i) => n - this.window.origin[i]));
+    gl.uniform3fv(u.get("uRight")!, camera.right);
+    gl.uniform3fv(u.get("uUp")!, camera.up);
+    gl.uniform3fv(u.get("uDirection")!, camera.direction);
+    gl.uniform1f(u.get("uSpan")!, 2 * Math.tan(camera.verticalFov * Math.PI / 360));
+    gl.uniform1f(u.get("uNear")!, camera.near);
+    gl.uniform1f(u.get("uFar")!, camera.far);
+    gl.uniform2fv(u.get("uFog")!, options.fog);
+    const coverage = options.coverage;
+    gl.activeTexture(gl.TEXTURE4);
+    gl.bindTexture(gl.TEXTURE_3D, coverage?.texture ?? this.window.texture);
+    gl.bindSampler(4, null);
+    gl.uniform1i(u.get("uCoverage")!, 4);
+    gl.uniform1i(u.get("uUseCoverage")!, coverage ? 1 : 0);
+    gl.uniform3fv(u.get("uCoverageMin")!, coverage?.min ?? [0, 0, 0]);
+    gl.uniform3fv(u.get("uCoverageMax")!, coverage?.max ?? [0, 0, 0]);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
   pick(ray: Ray, options: Pick<DrawOptions, "clipY" | "openBoundary"> = {}): PickResult {
     // 一次点击或头顶探测只读回一个整数像素，坐标不经过颜色编码或浮点深度反算。
     const gl = this.gl;
@@ -193,5 +236,6 @@ export class BrickmapRenderer {
     this.gl.deleteVertexArray(this.vao);
     this.gl.deleteProgram(this.color.handle);
     this.gl.deleteProgram(this.picking.handle);
+    if (this.perspective) this.gl.deleteProgram(this.perspective.handle);
   }
 }

@@ -70,7 +70,7 @@ test("世界中的私有贴图随区域卸载，重载与另一地区域不会�
   const data = decodeFrame(fixture());
   const atlas = new Texture({ width: 2048, height: 1024 });
   const scene = new Scene();
-  const world = new SectionScene(scene, atlas, new Map(), undefined, 16);
+  const world = new SectionScene(scene, atlas, new Map(), 16);
   const first = world.prepare({ x: -1, y: 0, z: 2 }, data);
   const second = world.prepare({ x: 1, y: 0, z: 2 }, data);
   world.add(first); world.add(second);
