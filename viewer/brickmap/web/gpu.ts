@@ -9,10 +9,11 @@ const BRICK_CELLS = 512;
 type Level = Volume["levels"][number];
 
 export interface GPURegion {
-  // 目录保留区域本地编号；窗口换位置时只重新映射，不改写原始目录。
+  // 本地目录保持不变，GPU 编号目录在上传时算好，供多个窗口和移动重建复用。
   readonly origin: Vec3;
   readonly size: Vec3;
   readonly levels: readonly Level[];
+  readonly mappedLevels: readonly Level[];
   readonly materials: Uint16Array;
   readonly slots: Uint32Array;
 }
@@ -87,7 +88,8 @@ export class BrickmapPool {
     }
     const slots = new Uint32Array(count);
     for (let i = 0; i < count; i++) slots[i] = this.free.pop() ?? this.nextSlot++;
-    const mapped = Uint16Array.from(volume.bricks, id => materials[id]);
+    const mapped = new Uint16Array(volume.bricks.length);
+    for (let i = 0; i < mapped.length; i++) mapped[i] = materials[volume.bricks[i]];
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.bricks);
     // 相邻槽位合成连续上传，避免为每个 8³ 小块发起一次 GL 调用。
     for (let start = 0; start < count;) {
@@ -110,10 +112,20 @@ export class BrickmapPool {
       }
       start = end;
     }
+    const levels = volume.levels.map(level => ({ size: [...level.size] as Vec3, cells: level.cells.slice() }));
+    const mappedLevels = levels.map(level => {
+      const cells = new Uint32Array(level.cells.length);
+      for (let i = 0; i < cells.length; i++) {
+        const value = level.cells[i];
+        cells[i] = value < 65536 ? materials[value] : value === MIXED ? MIXED : 65536 + slots[value - 65536];
+      }
+      return { size: level.size, cells };
+    });
     return {
       origin: [...volume.origin],
       size: [...volume.size],
-      levels: volume.levels.map(level => ({ size: [...level.size], cells: level.cells.slice() })),
+      levels,
+      mappedLevels,
       materials,
       slots,
     };
@@ -121,7 +133,8 @@ export class BrickmapPool {
 
   release(region: GPURegion): void {
     // 先从所有窗口摘除目录引用，再归还槽位；同一上下文的命令顺序保证复用安全。
-    for (const slot of region.slots) this.free.push(slot);
+    // 栈按原分配顺序再次取出槽位，连续砖仍能合成大块上传。
+    for (let i = region.slots.length - 1; i >= 0; i--) this.free.push(region.slots[i]);
   }
 
   dispose(): void {
@@ -212,15 +225,9 @@ export class BrickmapWindow {
     // 静态体积覆盖整份目录，供离线预览使用同一套共享资源与绘制接口。
     this.origin = [...region.origin];
     for (let i = 0; i < this.levels.length; i++) {
-      this.levels[i].cells.set(this.remap(region, i));
+      this.levels[i].cells.set(region.mappedLevels[i].cells);
     }
     this.uploadLevels(0);
-  }
-
-  private remap(region: GPURegion, level: number): Uint32Array {
-    // 均匀节点与混合砖都引用区域本地编号，映射时必须同时处理。
-    return Uint32Array.from(region.levels[level].cells, value =>
-      value < 65536 ? region.materials[value] : value === MIXED ? MIXED : 65536 + region.slots[value - 65536]);
   }
 
   private writeRegion(region: GPURegion, erase: boolean, upload: boolean): void {
@@ -228,16 +235,20 @@ export class BrickmapWindow {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_3D, this.texture);
     for (let i = 0; i <= 4; i++) {
-      const source = region.levels[i];
+      const source = region.mappedLevels[i];
       const target = this.levels[i];
       const offset = region.origin.map((n, axis) => (n - this.origin[axis]) / (8 * 2 ** i)) as Vec3;
-      const cells = erase ? new Uint32Array(source.cells.length).fill(UNKNOWN) : this.remap(region, i);
+      const cells = source.cells;
       for (let z = 0; z < source.size[2]; z++) for (let y = 0; y < source.size[1]; y++) {
         const start = source.size[0] * (y + source.size[1] * z);
         const destination = offset[0] + target.size[0] * (offset[1] + y + target.size[1] * (offset[2] + z));
-        target.cells.set(cells.subarray(start, start + source.size[0]), destination);
+        if (erase) target.cells.fill(UNKNOWN, destination, destination + source.size[0]);
+        else target.cells.set(cells.subarray(start, start + source.size[0]), destination);
       }
-      if (upload) gl.texSubImage3D(gl.TEXTURE_3D, i, ...offset, ...source.size, gl.RED_INTEGER, gl.UNSIGNED_INT, cells);
+      if (upload) {
+        const pixels = erase ? new Uint32Array(cells.length).fill(UNKNOWN) : cells;
+        gl.texSubImage3D(gl.TEXTURE_3D, i, ...offset, ...source.size, gl.RED_INTEGER, gl.UNSIGNED_INT, pixels);
+      }
     }
   }
 
